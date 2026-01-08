@@ -1,17 +1,23 @@
 package model
 
 import (
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Laisky/errors/v2"
+	"github.com/Laisky/zap"
+
+	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/logger"
+	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
 )
 
 type Option struct {
-	Key   string `json:"key" gorm:"primaryKey"`
-	Value string `json:"value"`
+	Key       string `json:"key" gorm:"primaryKey"`
+	Value     string `json:"value"`
+	CreatedAt int64  `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
+	UpdatedAt int64  `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
 }
 
 func AllOption() ([]*Option, error) {
@@ -21,6 +27,7 @@ func AllOption() ([]*Option, error) {
 	return options, err
 }
 
+// InitOptionMap initializes the OptionMap from config and database
 func InitOptionMap() {
 	config.OptionMapRWMutex.Lock()
 	config.OptionMap = make(map[string]string)
@@ -35,7 +42,7 @@ func InitOptionMap() {
 	config.OptionMap["AutomaticDisableChannelEnabled"] = strconv.FormatBool(config.AutomaticDisableChannelEnabled)
 	config.OptionMap["AutomaticEnableChannelEnabled"] = strconv.FormatBool(config.AutomaticEnableChannelEnabled)
 	config.OptionMap["ApproximateTokenEnabled"] = strconv.FormatBool(config.ApproximateTokenEnabled)
-	config.OptionMap["LogConsumeEnabled"] = strconv.FormatBool(config.LogConsumeEnabled)
+	config.OptionMap["LogConsumeEnabled"] = strconv.FormatBool(config.IsLogConsumeEnabled())
 	config.OptionMap["DisplayInCurrencyEnabled"] = strconv.FormatBool(config.DisplayInCurrencyEnabled)
 	config.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(config.DisplayTokenStatEnabled)
 	config.OptionMap["ChannelDisableThreshold"] = strconv.FormatFloat(config.ChannelDisableThreshold, 'f', -1, 64)
@@ -55,6 +62,14 @@ func InitOptionMap() {
 	config.OptionMap["ServerAddress"] = ""
 	config.OptionMap["GitHubClientId"] = ""
 	config.OptionMap["GitHubClientSecret"] = ""
+	config.OptionMap["LarkClientId"] = config.LarkClientId
+	config.OptionMap["LarkClientSecret"] = ""
+	config.OptionMap["OidcClientId"] = config.OidcClientId
+	config.OptionMap["OidcClientSecret"] = ""
+	config.OptionMap["OidcWellKnown"] = config.OidcWellKnown
+	config.OptionMap["OidcAuthorizationEndpoint"] = config.OidcAuthorizationEndpoint
+	config.OptionMap["OidcTokenEndpoint"] = config.OidcTokenEndpoint
+	config.OptionMap["OidcUserinfoEndpoint"] = config.OidcUserinfoEndpoint
 	config.OptionMap["WeChatServerAddress"] = ""
 	config.OptionMap["WeChatServerToken"] = ""
 	config.OptionMap["WeChatAccountQRCodeImageURL"] = ""
@@ -67,9 +82,7 @@ func InitOptionMap() {
 	config.OptionMap["QuotaForInvitee"] = strconv.FormatInt(config.QuotaForInvitee, 10)
 	config.OptionMap["QuotaRemindThreshold"] = strconv.FormatInt(config.QuotaRemindThreshold, 10)
 	config.OptionMap["PreConsumedQuota"] = strconv.FormatInt(config.PreConsumedQuota, 10)
-	config.OptionMap["ModelRatio"] = billingratio.ModelRatio2JSONString()
 	config.OptionMap["GroupRatio"] = billingratio.GroupRatio2JSONString()
-	config.OptionMap["CompletionRatio"] = billingratio.CompletionRatio2JSONString()
 	config.OptionMap["TopUpLink"] = config.TopUpLink
 	config.OptionMap["ChatLink"] = config.ChatLink
 	config.OptionMap["QuotaPerUnit"] = strconv.FormatFloat(config.QuotaPerUnit, 'f', -1, 64)
@@ -82,12 +95,13 @@ func InitOptionMap() {
 func loadOptionsFromDatabase() {
 	options, _ := AllOption()
 	for _, option := range options {
-		if option.Key == "ModelRatio" {
-			option.Value = billingratio.AddNewMissingRatio(option.Value)
+		// Skip deprecated global pricing options
+		if option.Key == "ModelRatio" || option.Key == "CompletionRatio" {
+			continue
 		}
 		err := updateOptionMap(option.Key, option.Value)
 		if err != nil {
-			logger.SysError("failed to update option map: " + err.Error())
+			logger.Logger.Error("failed to update option map", zap.Error(err))
 		}
 	}
 }
@@ -95,7 +109,7 @@ func loadOptionsFromDatabase() {
 func SyncOptions(frequency int) {
 	for {
 		time.Sleep(time.Duration(frequency) * time.Second)
-		logger.SysLog("syncing options from database")
+		logger.Logger.Info("syncing options from database")
 		loadOptionsFromDatabase()
 	}
 }
@@ -148,7 +162,7 @@ func updateOptionMap(key string, value string) (err error) {
 		case "ApproximateTokenEnabled":
 			config.ApproximateTokenEnabled = boolValue
 		case "LogConsumeEnabled":
-			config.LogConsumeEnabled = boolValue
+			config.SetLogConsumeEnabled(boolValue)
 		case "DisplayInCurrencyEnabled":
 			config.DisplayInCurrencyEnabled = boolValue
 		case "DisplayTokenStatEnabled":
@@ -223,12 +237,11 @@ func updateOptionMap(key string, value string) (err error) {
 		config.PreConsumedQuota, _ = strconv.ParseInt(value, 10, 64)
 	case "RetryTimes":
 		config.RetryTimes, _ = strconv.Atoi(value)
-	case "ModelRatio":
-		err = billingratio.UpdateModelRatioByJSONString(value)
+	case "ModelRatio", "CompletionRatio":
+		// Skip deprecated global pricing options - they are now handled by individual adapters
+		return nil
 	case "GroupRatio":
 		err = billingratio.UpdateGroupRatioByJSONString(value)
-	case "CompletionRatio":
-		err = billingratio.UpdateCompletionRatioByJSONString(value)
 	case "TopUpLink":
 		config.TopUpLink = value
 	case "ChatLink":
@@ -240,5 +253,8 @@ func updateOptionMap(key string, value string) (err error) {
 	case "Theme":
 		config.Theme = value
 	}
-	return err
+	if err != nil {
+		return errors.Wrap(err, "update group ratio configuration")
+	}
+	return nil
 }

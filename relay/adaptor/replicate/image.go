@@ -12,36 +12,24 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
+	"golang.org/x/image/webp"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
-	"golang.org/x/image/webp"
-	"golang.org/x/sync/errgroup"
 )
-
-// ImagesEditsHandler just copy response body to client
-//
-// https://replicate.com/black-forest-labs/flux-fill-pro
-// func ImagesEditsHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
-// 	c.Writer.WriteHeader(resp.StatusCode)
-// 	for k, v := range resp.Header {
-// 		c.Writer.Header().Set(k, v[0])
-// 	}
-
-// 	if _, err := io.Copy(c.Writer, resp.Body); err != nil {
-// 		return ErrorWrapper(err, "copy_response_body_failed", http.StatusInternalServerError), nil
-// 	}
-// 	defer resp.Body.Close()
-
-// 	return nil, nil
-// }
 
 var errNextLoop = errors.New("next_loop")
 
-func ImageHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+// ImageHandler handles the response from the image creation or remix request
+func ImageHandler(c *gin.Context, resp *http.Response) (
+	*model.ErrorWithStatusCode, *model.Usage) {
 	if resp.StatusCode != http.StatusCreated {
 		payload, _ := io.ReadAll(resp.Body)
 		return openai.ErrorWrapper(
@@ -63,7 +51,7 @@ func ImageHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCo
 	for {
 		err = func() error {
 			// get task
-			taskReq, err := http.NewRequestWithContext(c.Request.Context(),
+			taskReq, err := http.NewRequestWithContext(gmw.Ctx(c),
 				http.MethodGet, respData.URLs.Get, nil)
 			if err != nil {
 				return errors.Wrap(err, "new request")
@@ -95,7 +83,7 @@ func ImageHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCo
 			switch taskData.Status {
 			case "succeeded":
 			case "failed", "canceled":
-				return errors.Errorf("task failed: %s", taskData.Status)
+				return errors.Errorf("task failed, [%s]%s", taskData.Status, taskData.Error)
 			default:
 				time.Sleep(time.Second * 3)
 				return errNextLoop
@@ -117,10 +105,9 @@ func ImageHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCo
 			}
 
 			for _, imgOut := range output {
-				imgOut := imgOut
 				pool.Go(func() error {
 					// download image
-					downloadReq, err := http.NewRequestWithContext(c.Request.Context(),
+					downloadReq, err := http.NewRequestWithContext(gmw.Ctx(c),
 						http.MethodGet, imgOut, nil)
 					if err != nil {
 						return errors.Wrap(err, "new request")
@@ -164,7 +151,7 @@ func ImageHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCo
 					return errors.WithStack(err)
 				}
 
-				logger.Error(c, fmt.Sprintf("some images failed to download: %+v", err))
+				logger.Logger.Error("some images failed to download", zap.Error(err))
 			}
 
 			c.JSON(http.StatusOK, respBody)

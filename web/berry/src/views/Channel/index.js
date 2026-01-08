@@ -20,11 +20,13 @@ import { API } from 'utils/api';
 import { ITEMS_PER_PAGE } from 'constants';
 import { IconRefresh, IconHttpDelete, IconPlus, IconBrandSpeedtest, IconCoinYuan } from '@tabler/icons-react';
 import EditeModal from './component/EditModal';
+import PricingModal from './component/PricingModal';
 
 // ----------------------------------------------------------------------
 // CHANNEL_OPTIONS,
 export default function ChannelPage() {
   const [channels, setChannels] = useState([]);
+  const [totalChannels, setTotalChannels] = useState(0);
   const [activePage, setActivePage] = useState(0);
   const [searching, setSearching] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -32,29 +34,42 @@ export default function ChannelPage() {
   const matchUpMd = useMediaQuery(theme.breakpoints.up('sm'));
   const [openModal, setOpenModal] = useState(false);
   const [editChannelId, setEditChannelId] = useState(0);
+  const [openPricingModal, setOpenPricingModal] = useState(false);
+  const [pricingChannelId, setPricingChannelId] = useState(0);
+  const [pricingChannelName, setPricingChannelName] = useState('');
+  const [pricingChannelType, setPricingChannelType] = useState(0);
 
   const loadChannels = async (startIdx) => {
     setSearching(true);
-    const res = await API.get(`/api/channel/?p=${startIdx}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      if (startIdx === 0) {
-        setChannels(data);
+    try {
+      const res = await API.get(`/api/channel/?p=${startIdx}&size=${ITEMS_PER_PAGE}`);
+      const { success, message, data, total } = res.data;
+      if (success) {
+        const resolvedTotal = typeof total === 'number' ? total : (Array.isArray(data) ? data.length : 0);
+        setTotalChannels(resolvedTotal);
+        setChannels((prev) => {
+          if (startIdx === 0) {
+            return Array.isArray(data) ? data : [];
+          }
+          const next = Array.isArray(prev) ? [...prev] : [];
+          const pageData = Array.isArray(data) ? data : [];
+          next.splice(startIdx * ITEMS_PER_PAGE, pageData.length, ...pageData);
+          return next;
+        });
       } else {
-        let newChannels = [...channels];
-        newChannels.splice(startIdx * ITEMS_PER_PAGE, data.length, ...data);
-        setChannels(newChannels);
+        showError(message);
       }
-    } else {
-      showError(message);
+    } catch (err) {
+      showError(err?.message || err);
     }
     setSearching(false);
   };
 
   const onPaginationChange = (event, activePage) => {
     (async () => {
-      if (activePage === Math.ceil(channels.length / ITEMS_PER_PAGE)) {
-        // In this case we have to load more data and then append them.
+      const loadedPages = Math.ceil(channels.length / ITEMS_PER_PAGE);
+      const expectedPages = Math.ceil(totalChannels / ITEMS_PER_PAGE);
+      if (activePage >= loadedPages && activePage < expectedPages) {
         await loadChannels(activePage);
       }
       setActivePage(activePage);
@@ -69,13 +84,18 @@ export default function ChannelPage() {
       return;
     }
     setSearching(true);
-    const res = await API.get(`/api/channel/search?keyword=${searchKeyword}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setChannels(data);
-      setActivePage(0);
-    } else {
-      showError(message);
+    try {
+      const res = await API.get(`/api/channel/search?keyword=${searchKeyword}`);
+      const { success, message, data } = res.data;
+      if (success) {
+        setChannels(Array.isArray(data) ? data : []);
+        setTotalChannels(Array.isArray(data) ? data.length : 0);
+        setActivePage(0);
+      } else {
+        showError(message);
+      }
+    } catch (err) {
+      showError(err?.message || err);
     }
     setSearching(false);
   };
@@ -93,7 +113,7 @@ export default function ChannelPage() {
         res = await API.delete(url + id);
         break;
       case 'status':
-        res = await API.put(url, {
+        res = await API.put(`${url}?status_only=1`, {
           ...data,
           status: value
         });
@@ -102,20 +122,38 @@ export default function ChannelPage() {
         if (value === '') {
           return;
         }
-        res = await API.put(url, {
-          ...data,
-          priority: parseInt(value)
-        });
+        {
+          const parsedPriority = parseInt(value, 10);
+          if (Number.isNaN(parsedPriority)) {
+            showError('优先级必须是数字');
+            return;
+          }
+          const channel = channels.find((item) => item.id === id);
+          if (!channel) {
+            showError('未找到对应的渠道，稍后重试');
+            return;
+          }
+          res = await API.put(url, {
+            ...data,
+            name: channel.name,
+            priority: parsedPriority
+          });
+        }
         break;
       case 'test':
         res = await API.get(url + `test/${id}`);
         break;
+      default:
+        showError(`未知操作类型: ${action}`);
+        return;
     }
-    const { success, message } = res.data;
+    const { success, message, data: responseData } = res.data;
     if (success) {
       showSuccess('操作成功完成！');
       if (action === 'delete') {
         await handleRefresh();
+      } else if (action === 'priority') {
+        setChannels((prev) => prev.map((item) => (item.id === id ? { ...item, priority: responseData?.priority ?? item.priority } : item)));
       }
     } else {
       showError(message);
@@ -180,6 +218,20 @@ export default function ChannelPage() {
       handleCloseModal();
       handleRefresh();
     }
+  };
+
+  const handleOpenPricingModal = (channelId, channelName, channelType) => {
+    setPricingChannelId(channelId);
+    setPricingChannelName(channelName);
+    setPricingChannelType(channelType);
+    setOpenPricingModal(true);
+  };
+
+  const handleClosePricingModal = () => {
+    setOpenPricingModal(false);
+    setPricingChannelId(0);
+    setPricingChannelName('');
+    setPricingChannelType(0);
   };
 
   useEffect(() => {
@@ -265,6 +317,7 @@ export default function ChannelPage() {
                     key={row.id}
                     handleOpenModal={handleOpenModal}
                     setModalChannelId={setEditChannelId}
+                    handleOpenPricingModal={handleOpenPricingModal}
                   />
                 ))}
               </TableBody>
@@ -274,13 +327,20 @@ export default function ChannelPage() {
         <TablePagination
           page={activePage}
           component="div"
-          count={channels.length + (channels.length % ITEMS_PER_PAGE === 0 ? 1 : 0)}
+          count={totalChannels}
           rowsPerPage={ITEMS_PER_PAGE}
           onPageChange={onPaginationChange}
           rowsPerPageOptions={[ITEMS_PER_PAGE]}
         />
       </Card>
       <EditeModal open={openModal} onCancel={handleCloseModal} onOk={handleOkModal} channelId={editChannelId} />
+      <PricingModal
+        open={openPricingModal}
+        onClose={handleClosePricingModal}
+        channelId={pricingChannelId}
+        channelName={pricingChannelName}
+        channelType={pricingChannelType}
+      />
     </>
   );
 }

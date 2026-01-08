@@ -172,12 +172,12 @@ const SystemSetting = () => {
   const submitEmailDomainWhitelist = async () => {
     if (
       originInputs['EmailDomainWhitelist'] !==
-        inputs.EmailDomainWhitelist.join(',') &&
+      EmailDomainWhitelist.map(item => item.key).join(',') &&
       inputs.SMTPToken !== ''
     ) {
       await updateOption(
         'EmailDomainWhitelist',
-        inputs.EmailDomainWhitelist.join(',')
+        EmailDomainWhitelist.map(item => item.key).join(',')
       );
     }
   };
@@ -581,7 +581,7 @@ const SystemSetting = () => {
             <Header.Subheader>
               {t('setting.system.wechat.subtitle')}
               <a
-                href='https://github.com/songquanpeng/wechat-server'
+                href='https://github.com/Laisky/wechat-server'
                 target='_blank'
               >
                 {t('setting.system.wechat.learn_more')}

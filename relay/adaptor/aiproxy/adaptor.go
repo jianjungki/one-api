@@ -1,18 +1,22 @@
 package aiproxy
 
 import (
-	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
 	"io"
 	"net/http"
+
+	"github.com/Laisky/errors/v2"
+	"github.com/gin-gonic/gin"
+
+	"github.com/songquanpeng/one-api/relay/adaptor"
+	"github.com/songquanpeng/one-api/relay/adaptor/openai_compatible"
+	"github.com/songquanpeng/one-api/relay/meta"
+	"github.com/songquanpeng/one-api/relay/model"
 )
 
 type Adaptor struct {
 	meta *meta.Meta
+	adaptor.DefaultPricingMethods
 }
 
 func (a *Adaptor) Init(meta *meta.Meta) {
@@ -38,11 +42,16 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	return aiProxyLibraryRequest, nil
 }
 
-func (a *Adaptor) ConvertImageRequest(request *model.ImageRequest) (any, error) {
+func (a *Adaptor) ConvertImageRequest(_ *gin.Context, request *model.ImageRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
 	return request, nil
+}
+
+func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
+	// Use the shared OpenAI-compatible Claude Messages conversion
+	return openai_compatible.ConvertClaudeRequest(c, request)
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
@@ -64,4 +73,9 @@ func (a *Adaptor) GetModelList() []string {
 
 func (a *Adaptor) GetChannelName() string {
 	return "aiproxy"
+}
+
+// DefaultToolingConfig mirrors OpenAI's defaults because AIProxy relays OpenAI tool calls.
+func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
+	return AIProxyToolingDefaults
 }

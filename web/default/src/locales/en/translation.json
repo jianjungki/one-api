@@ -11,9 +11,17 @@
     "setting": "Settings",
     "about": "About",
     "chat": "Chat",
+    "more": "More",
+    "language": "Language",
     "login": "Login",
     "logout": "Logout",
-    "register": "Register"
+    "register": "Register",
+    "toggleTheme": "Toggle Theme",
+    "theme": {
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    }
   },
   "topup": {
     "title": "Top Up Center",
@@ -63,8 +71,14 @@
       "priority_tip": "Channel selection priority, higher is preferred",
       "select_test_model": "Please select test model",
       "click_to_update": "Click to update",
-      "balance_not_supported": "-"
+      "balance_not_supported": "Not Supported",
+      "balance_unknown": "Balance Unknown"
     },
+    "test": "Test",
+    "disable": "Disable",
+    "enable": "Enable",
+    "pricing": "Pricing",
+    "update_balance": "Update Balance",
     "buttons": {
       "test": "Test",
       "delete": "Delete",
@@ -92,6 +106,7 @@
     "edit": {
       "title_edit": "Update Channel Information",
       "title_create": "Create New Channel",
+      "loading": "Loading channel information...",
       "type": "Type",
       "name": "Name",
       "name_placeholder": "Please enter name",
@@ -102,16 +117,37 @@
       "models_placeholder": "Please select models supported by this channel",
       "model_mapping": "Model Mapping",
       "model_mapping_placeholder": "Optional, used to modify model names in request body. A JSON string where keys are request model names and values are target model names",
+      "model_mapping_help": "Redirects incoming model requests to different models. For example, map 'gpt-4-0314' to 'gpt-4' to handle deprecated model names. JSON format: {\"requested_model\": \"actual_model\"}",
+      "model_configs": "Model Configs",
+      "model_configs_placeholder": "Optional, unified model configuration including pricing and properties. JSON format where keys are model names and values contain ratio, completion_ratio, and max_tokens fields.",
+      "model_configs_help": "Configure pricing and limits per model. 'ratio' sets input token cost, 'completion_ratio' sets output token cost multiplier, 'max_tokens' sets request limit. Overrides default pricing.",
       "system_prompt": "System Prompt",
       "system_prompt_placeholder": "Optional, used to force set system prompt. Use with custom model & model mapping. First create a unique custom model name above, then map it to a natively supported model",
+      "system_prompt_help": "Forces a specific system prompt for all requests through this channel. Useful for creating specialized AI assistants or enforcing specific behavior patterns.",
       "proxy_url": "Proxy",
       "proxy_url_placeholder": "This is optional and used for API calls via a proxy. Please enter the proxy URL, formatted as: https://domain.com",
       "base_url": "Base URL",
       "base_url_placeholder": "The Base URL required by the OpenAPI SDK",
+      "ratelimit": "Channel RateLimit",
+      "ratelimit_placeholder": "Limit the rate for each token in each channel (3min), The default(0) is Unlimited",
+      "ratelimit_help": "Controls the maximum number of requests per token per channel within a 3-minute window. Set to 0 for unlimited requests. This helps prevent abuse and manage API usage.",
       "key": "Key",
       "key_placeholder": "Please enter key",
       "batch": "Batch Create",
       "batch_placeholder": "Please enter keys, one per line",
+      "coze_auth_type": "Authentication Type",
+      "coze_auth_options": {
+        "personal_access_token": "Personal Access Token",
+        "oauth_jwt": "OAuth JWT"
+      },
+      "oauth_jwt_config": "OAuth JWT Config",
+      "oauth_jwt_config_placeholder": "Please enter OAuth JWT Config information",
+      "model_ratio": "Model Pricing",
+      "model_ratio_placeholder": "Optional, channel-specific model pricing in JSON format. Leave empty to use default pricing.",
+      "model_ratio_help": "JSON format: {\"model-name\": price_ratio}. Price ratio is multiplied by token count to calculate cost.",
+      "completion_ratio": "Completion Pricing",
+      "completion_ratio_placeholder": "Optional, channel-specific completion token pricing ratios in JSON format.",
+      "completion_ratio_help": "JSON format: {\"model-name\": completion_ratio}. Completion ratio is multiplied by completion tokens.",
       "buttons": {
         "cancel": "Cancel",
         "submit": "Submit",
@@ -119,14 +155,21 @@
         "fill_all": "Fill All Models",
         "clear": "Clear All Models",
         "add_custom": "Add",
-        "custom_placeholder": "Enter custom model name"
+        "custom_placeholder": "Enter custom model name",
+        "load_defaults": "Load Defaults"
       },
       "messages": {
         "name_required": "Please enter channel name and key!",
         "models_required": "Please select at least one model!",
         "model_mapping_invalid": "Model mapping must be valid JSON format!",
+        "model_configs_invalid": "Model configs must be valid JSON format!",
+        "model_ratio_invalid": "Model pricing must be valid JSON format!",
+        "completion_ratio_invalid": "Completion pricing must be valid JSON format!",
         "update_success": "Channel updated successfully!",
-        "create_success": "Channel created successfully!"
+        "create_success": "Channel created successfully!",
+        "oauth_jwt_config_invalid_format": "OAuth JWT Config must be valid JSON format!",
+        "oauth_jwt_config_missing_field": "OAuth JWT Config is missing required field: {{field}}!",
+        "oauth_jwt_config_parse_error": "OAuth JWT Config parse failed: {{error}}!"
       },
       "spark_version": "Model Version",
       "spark_version_placeholder": "Please enter Spark model version from API URL, e.g.: v2.1",
@@ -177,6 +220,10 @@
       "status_depleted": "Depleted",
       "status_unknown": "Unknown Status"
     },
+    "copy": "Copy",
+    "disable": "Disable",
+    "enable": "Enable",
+    "delete_confirm": "Confirm delete this token?",
     "buttons": {
       "copy": "Copy",
       "chat": "Chat",
@@ -191,6 +238,7 @@
     "edit": {
       "title_edit": "Update Token Information",
       "title_create": "Create New Token",
+      "loading": "Loading token information...",
       "name": "Name",
       "name_placeholder": "Please enter name",
       "models": "Model Scope",
@@ -243,7 +291,13 @@
       "display": "Equivalent: ${{amount}}",
       "display_short": "${{amount}}",
       "unit": "$"
-    }
+    },
+    "edit": "Edit",
+    "delete": "Delete",
+    "enable": "Enable",
+    "disable": "Disable",
+    "test": "Test",
+    "unknown": "Unknown"
   },
   "redemption": {
     "title": "Redemption Management",
@@ -278,6 +332,7 @@
     "edit": {
       "title_edit": "Update Redemption Code",
       "title_create": "Create New Redemption Code",
+      "loading": "Loading redemption information...",
       "name": "Name",
       "name_placeholder": "Please enter name",
       "quota": "Quota",
@@ -307,7 +362,8 @@
       "usage": "Usage",
       "admin": "Admin",
       "system": "System",
-      "test": "Test"
+      "test": "Test",
+      "unknown": "Unknown Type"
     },
     "table": {
       "time": "Time",
@@ -327,7 +383,11 @@
       "prompt_tokens": "Prompt Tokens",
       "completion_tokens": "Completion Tokens",
       "quota": "Quota",
-      "detail": "Detail"
+      "latency": "Latency",
+      "detail": "Detail",
+      "unknown_user": "Unknown User",
+      "no_details": "No Details",
+      "token": "Token"
     },
     "buttons": {
       "query": "Action",
@@ -339,6 +399,7 @@
     "title": "User Management",
     "edit": {
       "title": "Update User Information",
+      "loading": "Loading user information...",
       "username": "Username",
       "username_placeholder": "Please enter new username",
       "password": "Password",
@@ -392,6 +453,14 @@
         "banned": "Banned",
         "unknown": "Unknown Status"
       },
+      "status": {
+        "active": "Active",
+        "banned": "Banned",
+        "pending": "Pending",
+        "unknown": "Unknown Status",
+        "enabled": "Enabled",
+        "disabled": "Disabled"
+      },
       "sort": {
         "default": "Default Order",
         "by_quota": "Sort by Remaining Quota",
@@ -400,6 +469,11 @@
       },
       "sort_by": "Sort By"
     },
+    "top_up": "Top Up",
+    "ban": "Ban",
+    "unban": "Unban",
+    "disable_confirm": "Confirm disable this user?",
+    "enable_confirm": "Confirm enable this user?",
     "buttons": {
       "add": "Add New User",
       "delete": "Delete",
@@ -408,7 +482,8 @@
       "disable": "Disable",
       "edit": "Edit",
       "promote": "Promote",
-      "demote": "Demote"
+      "demote": "Demote",
+      "confirm_delete": "Confirm Delete"
     }
   },
   "dashboard": {

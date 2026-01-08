@@ -2,18 +2,21 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/common/random"
 	"github.com/songquanpeng/one-api/controller"
 	"github.com/songquanpeng/one-api/model"
@@ -31,18 +34,21 @@ type GitHubUser struct {
 	Email string `json:"email"`
 }
 
-func getGitHubUserInfoByCode(code string) (*GitHubUser, error) {
+func getGitHubUserInfoByCode(ctx context.Context, code string) (*GitHubUser, error) {
 	if code == "" {
-		return nil, errors.New("无效的参数")
+		return nil, errors.New("Invalid parameter")
 	}
+
+	logger := gmw.GetLogger(ctx)
+
 	values := map[string]string{"client_id": config.GitHubClientId, "client_secret": config.GitHubClientSecret, "code": code}
 	jsonData, err := json.Marshal(values)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "marshal GitHub OAuth payload")
 	}
 	req, err := http.NewRequest("POST", "https://github.com/login/oauth/access_token", bytes.NewBuffer(jsonData))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "build GitHub OAuth request")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
@@ -51,39 +57,44 @@ func getGitHubUserInfoByCode(code string) (*GitHubUser, error) {
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		logger.SysLog(err.Error())
-		return nil, errors.New("无法连接至 GitHub 服务器，请稍后重试！")
+		return nil, errors.Wrap(err, "unable to connect to GitHub server")
 	}
 	defer res.Body.Close()
 	var oAuthResponse GitHubOAuthResponse
-	err = json.NewDecoder(res.Body).Decode(&oAuthResponse)
-	if err != nil {
-		return nil, err
+	if err = json.NewDecoder(res.Body).Decode(&oAuthResponse); err != nil {
+		return nil, errors.Wrap(err, "decode GitHub OAuth response")
 	}
+
+	// https://docs.github.com/en/rest/users/users?apiVersion=2022-11-28#get-the-authenticated-user
 	req, err = http.NewRequest("GET", "https://api.github.com/user", nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "build GitHub user info request")
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", oAuthResponse.AccessToken))
 	res2, err := client.Do(req)
 	if err != nil {
-		logger.SysLog(err.Error())
-		return nil, errors.New("无法连接至 GitHub 服务器，请稍后重试！")
+		return nil, errors.Wrap(err, "unable to connect to GitHub server for user info")
 	}
 	defer res2.Body.Close()
-	var githubUser GitHubUser
-	err = json.NewDecoder(res2.Body).Decode(&githubUser)
+
+	githubUserBody, err := io.ReadAll(res2.Body)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "read GitHub user info response body")
+	}
+	logger.Debug("got user info from github", zap.ByteString("payload", githubUserBody))
+
+	var githubUser GitHubUser
+	if err = json.Unmarshal(githubUserBody, &githubUser); err != nil {
+		return nil, errors.Wrap(err, "decode GitHub user info")
 	}
 	if githubUser.Login == "" {
-		return nil, errors.New("返回值非法，用户字段为空，请稍后重试！")
+		return nil, errors.New("The return value is illegal, the user field is empty, please try again later!")
 	}
 	return &githubUser, nil
 }
 
 func GitHubOAuth(c *gin.Context) {
-	ctx := c.Request.Context()
+	ctx := gmw.Ctx(c)
 	session := sessions.Default(c)
 	state := c.Query("state")
 	if state == "" || session.Get("oauth_state") == nil || state != session.Get("oauth_state").(string) {
@@ -102,12 +113,12 @@ func GitHubOAuth(c *gin.Context) {
 	if !config.GitHubOAuthEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "管理员未开启通过 GitHub 登录以及注册",
+			"message": "The administrator did not turn on login and registration via GitHub",
 		})
 		return
 	}
 	code := c.Query("code")
-	githubUser, err := getGitHubUserInfoByCode(code)
+	githubUser, err := getGitHubUserInfoByCode(ctx, code)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -149,7 +160,7 @@ func GitHubOAuth(c *gin.Context) {
 		} else {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
-				"message": "管理员关闭了新用户注册",
+				"message": "The administrator has turned off new user registration",
 			})
 			return
 		}
@@ -157,7 +168,7 @@ func GitHubOAuth(c *gin.Context) {
 
 	if user.Status != model.UserStatusEnabled {
 		c.JSON(http.StatusOK, gin.H{
-			"message": "用户已被封禁",
+			"message": "User has been banned",
 			"success": false,
 		})
 		return
@@ -169,12 +180,12 @@ func GitHubBind(c *gin.Context) {
 	if !config.GitHubOAuthEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "管理员未开启通过 GitHub 登录以及注册",
+			"message": "The administrator did not turn on login and registration via GitHub",
 		})
 		return
 	}
 	code := c.Query("code")
-	githubUser, err := getGitHubUserInfoByCode(code)
+	githubUser, err := getGitHubUserInfoByCode(gmw.Ctx(c), code)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -188,7 +199,7 @@ func GitHubBind(c *gin.Context) {
 	if model.IsGitHubIdAlreadyTaken(user.GitHubId) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "该 GitHub 账户已被绑定",
+			"message": "The GitHub account has been bound",
 		})
 		return
 	}

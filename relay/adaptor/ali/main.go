@@ -3,16 +3,21 @@ package ali
 import (
 	"bufio"
 	"encoding/json"
-	"github.com/songquanpeng/one-api/common/ctxkey"
-	"github.com/songquanpeng/one-api/common/render"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
+
 	"github.com/songquanpeng/one-api/common"
+	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/songquanpeng/one-api/common/render"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/model"
 )
@@ -37,7 +42,7 @@ func ConvertRequest(request model.GeneralOpenAIRequest) *ChatRequest {
 		aliModel = strings.TrimSuffix(aliModel, EnableSearchModelSuffix)
 	}
 	request.TopP = helper.Float64PtrMax(request.TopP, 0.9999)
-	return &ChatRequest{
+	chatRequest := &ChatRequest{
 		Model: aliModel,
 		Input: Input{
 			Messages: messages,
@@ -54,6 +59,10 @@ func ConvertRequest(request model.GeneralOpenAIRequest) *ChatRequest {
 			Tools:             request.Tools,
 		},
 	}
+	if chatRequest.Parameters.MaxTokens == 0 {
+		chatRequest.Parameters.MaxTokens = config.DefaultMaxToken
+	}
+	return chatRequest
 }
 
 func ConvertEmbeddingRequest(request model.GeneralOpenAIRequest) *EmbeddingRequest {
@@ -73,7 +82,9 @@ func ConvertImageRequest(request model.ImageRequest) *ImageRequest {
 	imageRequest.Model = request.Model
 	imageRequest.Parameters.Size = strings.Replace(request.Size, "x", "*", -1)
 	imageRequest.Parameters.N = request.N
-	imageRequest.ResponseFormat = request.ResponseFormat
+	if request.ResponseFormat != nil {
+		imageRequest.ResponseFormat = *request.ResponseFormat
+	}
 
 	return &imageRequest
 }
@@ -91,12 +102,14 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStat
 	}
 
 	if aliResponse.Code != "" {
+		errType := model.ErrorType(aliResponse.Code)
 		return &model.ErrorWithStatusCode{
 			Error: model.Error{
-				Message: aliResponse.Message,
-				Type:    aliResponse.Code,
-				Param:   aliResponse.RequestId,
-				Code:    aliResponse.Code,
+				Message:  aliResponse.Message,
+				Type:     errType,
+				Param:    aliResponse.RequestId,
+				Code:     aliResponse.Code,
+				RawError: errors.New(aliResponse.Message),
 			},
 			StatusCode: resp.StatusCode,
 		}, nil
@@ -170,6 +183,7 @@ func streamResponseAli2OpenAI(aliResponse *ChatResponse) *openai.ChatCompletions
 
 func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	var usage model.Usage
+	lg := gmw.GetLogger(c)
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		if atEOF && len(data) == 0 {
@@ -196,7 +210,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		var aliResponse ChatResponse
 		err := json.Unmarshal([]byte(data), &aliResponse)
 		if err != nil {
-			logger.SysError("error unmarshalling stream response: " + err.Error())
+			lg.Error("error unmarshalling stream response: ", zap.Error(err))
 			continue
 		}
 		if aliResponse.Usage.OutputTokens != 0 {
@@ -210,12 +224,12 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		}
 		err = render.ObjectData(c, response)
 		if err != nil {
-			logger.SysError(err.Error())
+			lg.Error("error rendering response: ", zap.Error(err))
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		logger.SysError("error reading stream: " + err.Error())
+		lg.Error("error reading stream: ", zap.Error(err))
 	}
 
 	render.Done(c)
@@ -228,7 +242,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 }
 
 func Handler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
-	ctx := c.Request.Context()
+	lg := gmw.GetLogger(c)
 	var aliResponse ChatResponse
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -238,18 +252,20 @@ func Handler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *
 	if err != nil {
 		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
 	}
-	logger.Debugf(ctx, "response body: %s\n", responseBody)
+	lg.Debug(fmt.Sprintf("response body: %s\n", responseBody))
 	err = json.Unmarshal(responseBody, &aliResponse)
 	if err != nil {
 		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 	if aliResponse.Code != "" {
+		errType := model.ErrorType(aliResponse.Code)
 		return &model.ErrorWithStatusCode{
 			Error: model.Error{
-				Message: aliResponse.Message,
-				Type:    aliResponse.Code,
-				Param:   aliResponse.RequestId,
-				Code:    aliResponse.Code,
+				Message:  aliResponse.Message,
+				Type:     errType,
+				Param:    aliResponse.RequestId,
+				Code:     aliResponse.Code,
+				RawError: errors.New(aliResponse.Message),
 			},
 			StatusCode: resp.StatusCode,
 		}, nil

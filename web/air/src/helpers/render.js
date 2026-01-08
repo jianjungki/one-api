@@ -1,3 +1,4 @@
+import React from 'react';
 import {Label} from 'semantic-ui-react';
 import {Tag} from "@douyinfe/semi-ui";
 
@@ -42,6 +43,42 @@ export function renderNumber(num) {
     }
 }
 
+/**
+ * Renders a number with tooltip showing exact value when abbreviated.
+ * WARNING: Returns JSX element for abbreviated numbers, plain value otherwise.
+ * Only use in React components, not for plain text contexts.
+ * @param {number} num - The number to render
+ * @returns {JSX.Element|string|number} JSX span with tooltip for large numbers, plain value otherwise
+ */
+export function renderNumberWithTooltip(num) {
+    const abbreviated = renderNumber(num);
+    const exact = num.toLocaleString();
+
+    // If the number was abbreviated, return JSX with tooltip
+    if (num >= 10000) {
+        return (
+            <span title={exact} style={{ cursor: 'help', textDecoration: 'underline dotted' }}>
+                {abbreviated}
+            </span>
+        );
+    }
+
+    // If not abbreviated, just return the number
+    return abbreviated;
+}
+
+export function renderNumberForChart(num) {
+    const abbreviated = renderNumber(num);
+    const exact = num.toLocaleString();
+
+    // For charts, return the abbreviated version but include exact in a data attribute or similar
+    if (num >= 10000) {
+        return `${abbreviated} (${exact})`;
+    }
+
+    return abbreviated;
+}
+
 export function renderQuotaNumberWithDigit(num, digits = 2) {
     let displayInCurrency = localStorage.getItem('display_in_currency');
     num = num.toFixed(digits);
@@ -81,20 +118,20 @@ export function renderNumberWithPoint(num) {
 
 export function getQuotaPerUnit() {
     let quotaPerUnit = localStorage.getItem('quota_per_unit');
-    quotaPerUnit = parseFloat(quotaPerUnit);
+    quotaPerUnit = parseFloat(quotaPerUnit || '500000');
     return quotaPerUnit;
 }
 
 export function getQuotaWithUnit(quota, digits = 6) {
     let quotaPerUnit = localStorage.getItem('quota_per_unit');
-    quotaPerUnit = parseFloat(quotaPerUnit);
+    quotaPerUnit = parseFloat(quotaPerUnit || '500000');
     return (quota / quotaPerUnit).toFixed(digits);
 }
 
 export function renderQuota(quota, digits = 2) {
     let quotaPerUnit = localStorage.getItem('quota_per_unit');
     let displayInCurrency = localStorage.getItem('display_in_currency');
-    quotaPerUnit = parseFloat(quotaPerUnit);
+    quotaPerUnit = parseFloat(quotaPerUnit || '500000');
     displayInCurrency = displayInCurrency === 'true';
     if (displayInCurrency) {
         return '$' + (quota / quotaPerUnit).toFixed(digits);
@@ -120,6 +157,8 @@ export const modelColorMap = {
     'dall-e': 'rgb(147,112,219)',  // 深紫色
     'dall-e-2': 'rgb(147,112,219)',  // 介于紫色和蓝色之间的色调
     'dall-e-3': 'rgb(153,50,204)',  // 介于紫罗兰和洋红之间的色调
+    'gpt-image-1': 'rgb(153,50,204)',  // 介于紫罗兰和洋红之间的色调
+    'gpt-image-1-mini': 'rgb(153,50,204)',  // 介于紫罗兰和洋红之间的色调
     'midjourney': 'rgb(136,43,180)',  // 介于紫罗兰和洋红之间的色调
     'gpt-3.5-turbo': 'rgb(184,227,167)',  // 浅绿色
     'gpt-3.5-turbo-0301': 'rgb(131,220,131)',  // 亮绿色

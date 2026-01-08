@@ -15,12 +15,17 @@ func SetApiRouter(router *gin.Engine) {
 	apiRouter.Use(middleware.GlobalAPIRateLimit())
 	{
 		apiRouter.GET("/status", controller.GetStatus)
+		apiRouter.GET("/status/channel", controller.GetChannelStatus)
 		apiRouter.GET("/models", middleware.UserAuth(), controller.DashboardListModels)
+		// Public endpoint: anonymous users see all supported models; logged-in users see only allowed models
+		apiRouter.GET("/models/display", controller.GetModelsDisplay)
 		apiRouter.GET("/notice", controller.GetNotice)
 		apiRouter.GET("/about", controller.GetAbout)
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
 		apiRouter.GET("/verification", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendEmailVerification)
 		apiRouter.GET("/reset_password", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendPasswordResetEmail)
+		apiRouter.GET("/user/get-by-token", middleware.TokenAuth(), controller.GetSelfByToken)
+		apiRouter.GET("/available_models", middleware.TokenAuth(), controller.GetAvailableModelsByToken)
 		apiRouter.POST("/user/reset", middleware.CriticalRateLimit(), controller.ResetPassword)
 		apiRouter.GET("/oauth/github", middleware.CriticalRateLimit(), auth.GitHubOAuth)
 		apiRouter.GET("/oauth/oidc", middleware.CriticalRateLimit(), auth.OidcAuth)
@@ -34,13 +39,14 @@ func SetApiRouter(router *gin.Engine) {
 		userRoute := apiRouter.Group("/user")
 		{
 			userRoute.POST("/register", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.Register)
-			userRoute.POST("/login", middleware.CriticalRateLimit(), controller.Login)
+			userRoute.POST("/login", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.Login)
 			userRoute.GET("/logout", controller.Logout)
 
 			selfRoute := userRoute.Group("/")
 			selfRoute.Use(middleware.UserAuth())
 			{
 				selfRoute.GET("/dashboard", controller.GetUserDashboard)
+				selfRoute.GET("/dashboard/users", controller.GetDashboardUsers)
 				selfRoute.GET("/self", controller.GetSelf)
 				selfRoute.PUT("/self", controller.UpdateSelf)
 				selfRoute.DELETE("/self", controller.DeleteSelf)
@@ -48,6 +54,10 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/aff", controller.GetAffCode)
 				selfRoute.POST("/topup", controller.TopUp)
 				selfRoute.GET("/available_models", controller.GetUserAvailableModels)
+				selfRoute.GET("/totp/status", controller.GetTotpStatus)
+				selfRoute.GET("/totp/setup", controller.SetupTotp)
+				selfRoute.POST("/totp/confirm", controller.ConfirmTotp)
+				selfRoute.POST("/totp/disable", controller.DisableTotp)
 			}
 
 			adminRoute := userRoute.Group("/")
@@ -60,6 +70,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.POST("/manage", controller.ManageUser)
 				adminRoute.PUT("/", controller.UpdateUser)
 				adminRoute.DELETE("/:id", controller.DeleteUser)
+				adminRoute.POST("/totp/disable/:id", controller.AdminDisableUserTotp)
 			}
 		}
 		optionRoute := apiRouter.Group("/option")
@@ -74,15 +85,30 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/", controller.GetAllChannels)
 			channelRoute.GET("/search", controller.SearchChannels)
 			channelRoute.GET("/models", controller.ListAllModels)
+			channelRoute.GET("/metadata", controller.GetChannelMetadata)
 			channelRoute.GET("/:id", controller.GetChannel)
 			channelRoute.GET("/test", controller.TestChannels)
 			channelRoute.GET("/test/:id", controller.TestChannel)
 			channelRoute.GET("/update_balance", controller.UpdateAllChannelsBalance)
 			channelRoute.GET("/update_balance/:id", controller.UpdateChannelBalance)
+			channelRoute.GET("/pricing/:id", controller.GetChannelPricing)
+			channelRoute.GET("/default-pricing", controller.GetChannelDefaultPricing)
 			channelRoute.POST("/", controller.AddChannel)
 			channelRoute.PUT("/", controller.UpdateChannel)
+			channelRoute.PUT("/pricing/:id", controller.UpdateChannelPricing)
 			channelRoute.DELETE("/disabled", controller.DeleteDisabledChannel)
 			channelRoute.DELETE("/:id", controller.DeleteChannel)
+		}
+		debugRoute := apiRouter.Group("/debug")
+		debugRoute.Use(middleware.AdminAuth())
+		{
+			debugRoute.POST("/channel/:id/debug", controller.DebugChannelModelConfigs)
+			debugRoute.GET("/channels", controller.DebugAllChannelModelConfigs)
+			debugRoute.POST("/channel/:id/fix", controller.FixChannelModelConfigs)
+			debugRoute.GET("/channels/validate", controller.ValidateAllChannelModelConfigs)
+			debugRoute.POST("/channels/remigrate", controller.RemigratAllChannels)
+			debugRoute.GET("/channel/:id/migration-status", controller.GetChannelMigrationStatus)
+			debugRoute.POST("/channels/clean", controller.CleanAllMixedModelData)
 		}
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())
@@ -93,6 +119,11 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.POST("/", controller.AddToken)
 			tokenRoute.PUT("/", controller.UpdateToken)
 			tokenRoute.DELETE("/:id", controller.DeleteToken)
+			apiRouter.POST("/token/consume", middleware.TokenAuth(), controller.ConsumeToken)
+		}
+		costRoute := apiRouter.Group("/cost")
+		{
+			costRoute.GET("/request/:request_id", controller.GetRequestCost)
 		}
 		redemptionRoute := apiRouter.Group("/redemption")
 		redemptionRoute.Use(middleware.AdminAuth())
@@ -112,6 +143,14 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), controller.SearchUserLogs)
+
+		// Tracing routes
+		traceRoute := apiRouter.Group("/trace")
+		traceRoute.Use(middleware.UserAuth()) // Users can view traces for their own logs
+		{
+			traceRoute.GET("/log/:log_id", controller.GetTraceByLogId)
+			traceRoute.GET("/:trace_id", controller.GetTraceByTraceId)
+		}
 		groupRoute := apiRouter.Group("/group")
 		groupRoute.Use(middleware.AdminAuth())
 		{

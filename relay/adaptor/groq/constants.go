@@ -1,27 +1,47 @@
 package groq
 
-// https://console.groq.com/docs/models
+import (
+	"github.com/songquanpeng/one-api/relay/adaptor"
+	"github.com/songquanpeng/one-api/relay/billing/ratio"
+)
 
-var ModelList = []string{
-	"gemma2-9b-it",
-	"llama-3.1-70b-versatile",
-	"llama-3.1-8b-instant",
-	"llama-3.2-11b-text-preview",
-	"llama-3.2-11b-vision-preview",
-	"llama-3.2-1b-preview",
-	"llama-3.2-3b-preview",
-	"llama-3.2-90b-text-preview",
-	"llama-3.2-90b-vision-preview",
-	"llama-guard-3-8b",
-	"llama3-70b-8192",
-	"llama3-8b-8192",
-	"llama3-groq-70b-8192-tool-use-preview",
-	"llama3-groq-8b-8192-tool-use-preview",
-	"llava-v1.5-7b-4096-preview",
-	"mixtral-8x7b-32768",
-	"distil-whisper-large-v3-en",
-	"whisper-large-v3",
-	"whisper-large-v3-turbo",
-	"deepseek-r1-distill-llama-70b-specdec",
-	"deepseek-r1-distill-llama-70b",
+// ModelRatios contains all supported models and their pricing ratios
+// Model list is derived from the keys of this map, eliminating redundancy
+// Based on Groq pricing: https://groq.com/pricing/
+var ModelRatios = map[string]adaptor.ModelConfig{
+	// Regular Models
+	"llama-3.3-70b-versatile":      {Ratio: 0.59 * ratio.MilliTokensUsd, CompletionRatio: 0.79 / 0.59},
+	"llama-3.1-8b-instant":         {Ratio: 0.05 * ratio.MilliTokensUsd, CompletionRatio: 0.08 / 0.05},
+	"meta-llama/llama-guard-4-12b": {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"whisper-large-v3":             {Ratio: 0.111 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"whisper-large-v3-turbo":       {Ratio: 0.04 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"openai/gpt-oss-120b":          {Ratio: 0.15 * ratio.MilliTokensUsd, CachedInputRatio: 0.075 * ratio.MilliTokensUsd, CompletionRatio: 0.75 / 0.15},
+	"openai/gpt-oss-20b":           {Ratio: 0.1 * ratio.MilliTokensUsd, CachedInputRatio: 0.0375 * ratio.MilliTokensUsd, CompletionRatio: 0.5 / 0.1},
+
+	// Preview Models
+	"meta-llama/llama-4-maverick-17b-128e-instruct": {Ratio: 0.2 * ratio.MilliTokensUsd, CompletionRatio: 0.6 / 0.2},
+	"meta-llama/llama-4-scout-17b-16e-instruct":     {Ratio: 0.11 * ratio.MilliTokensUsd, CompletionRatio: 0.34 / 0.11},
+	"meta-llama/llama-prompt-guard-2-22m":           {Ratio: 0.03 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"meta-llama/llama-prompt-guard-2-86m":           {Ratio: 0.04 * ratio.MilliTokensUsd, CompletionRatio: 1},
+	"moonshotai/kimi-k2-instruct-0905":              {Ratio: 1 * ratio.MilliTokensUsd, CachedInputRatio: 0.5 * ratio.MilliTokensUsd, CompletionRatio: 3},
+	"openai/gpt-oss-safeguard-20b":                  {Ratio: 0.075 * ratio.MilliTokensUsd, CompletionRatio: 0.3 / 0.075},
+	"qwen/qwen3-32b":                                {Ratio: 0.29 * ratio.MilliTokensUsd, CompletionRatio: 0.59 / 0.29},
+}
+
+// ModelList derived from ModelRatios for backward compatibility
+var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
+
+// GroqToolingDefaults enumerates Groq's Compound and GPT-OSS built-in tools and pricing (retrieved 2025-11-12).
+// Source: https://r.jina.ai/https://groq.com/pricing
+var GroqToolingDefaults = adaptor.ChannelToolConfig{
+	Pricing: map[string]adaptor.ToolPricingConfig{
+		"basic_search":          {UsdPerCall: 0.005},
+		"advanced_search":       {UsdPerCall: 0.008},
+		"visit_website":         {UsdPerCall: 0.001},
+		"code_execution":        {UsdPerCall: 0.18},
+		"browser_automation":    {UsdPerCall: 0.08},
+		"browser_search_basic":  {UsdPerCall: 0.005},
+		"browser_search_visit":  {UsdPerCall: 0.001},
+		"code_execution_python": {UsdPerCall: 0.18},
+	},
 }

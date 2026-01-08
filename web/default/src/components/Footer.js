@@ -30,7 +30,7 @@ const Footer = () => {
 
   return (
     <Segment vertical>
-      <Container textAlign='center' style={{ color: '#666666' }}>
+      <Container textAlign='center' style={{ color: 'var(--text-secondary)' }}>
         {footer ? (
           <div
             className='custom-footer'
@@ -38,13 +38,9 @@ const Footer = () => {
           ></div>
         ) : (
           <div className='custom-footer'>
-            <a href='https://github.com/songquanpeng/one-api' target='_blank'>
+            <a href='https://github.com/Laisky/one-api' target='_blank'>
               {systemName} {process.env.REACT_APP_VERSION}{' '}
             </a>
-            {t('footer.built_by')}{' '}
-            <a href='https://github.com/songquanpeng' target='_blank'>
-              {t('footer.built_by_name')}
-            </a>{' '}
             {t('footer.license')}{' '}
             <a href='https://opensource.org/licenses/mit-license.php'>
               {t('footer.mit')}

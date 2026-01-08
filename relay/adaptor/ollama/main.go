@@ -2,21 +2,22 @@ package ollama
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
-	"fmt"
-	"github.com/songquanpeng/one-api/common/render"
 	"io"
 	"net/http"
 	"strings"
 
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/random"
-
+	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
+
 	"github.com/songquanpeng/one-api/common"
+	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/image"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/songquanpeng/one-api/common/render"
+	"github.com/songquanpeng/one-api/common/tracing"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/constant"
 	"github.com/songquanpeng/one-api/relay/model"
@@ -36,6 +37,9 @@ func ConvertRequest(request model.GeneralOpenAIRequest) *ChatRequest {
 		},
 		Stream: request.Stream,
 	}
+	if ollamaRequest.Options.NumPredict == 0 {
+		ollamaRequest.Options.NumPredict = config.DefaultMaxToken
+	}
 	for _, message := range request.Messages {
 		openaiContent := message.ParseContent()
 		var imageUrls []string
@@ -43,7 +47,9 @@ func ConvertRequest(request model.GeneralOpenAIRequest) *ChatRequest {
 		for _, part := range openaiContent {
 			switch part.Type {
 			case model.ContentTypeText:
-				contentText = part.Text
+				if part.Text != nil {
+					contentText = *part.Text
+				}
 			case model.ContentTypeImageURL:
 				_, data, _ := image.GetImageFromUrl(part.ImageURL.Url)
 				imageUrls = append(imageUrls, data)
@@ -58,7 +64,7 @@ func ConvertRequest(request model.GeneralOpenAIRequest) *ChatRequest {
 	return &ollamaRequest
 }
 
-func responseOllama2OpenAI(response *ChatResponse) *openai.TextResponse {
+func responseOllama2OpenAI(c *gin.Context, response *ChatResponse) *openai.TextResponse {
 	choice := openai.TextResponseChoice{
 		Index: 0,
 		Message: model.Message{
@@ -70,7 +76,7 @@ func responseOllama2OpenAI(response *ChatResponse) *openai.TextResponse {
 		choice.FinishReason = "stop"
 	}
 	fullTextResponse := openai.TextResponse{
-		Id:      fmt.Sprintf("chatcmpl-%s", random.GetUUID()),
+		Id:      tracing.GenerateChatCompletionID(c),
 		Model:   response.Model,
 		Object:  "chat.completion",
 		Created: helper.GetTimestamp(),
@@ -84,7 +90,7 @@ func responseOllama2OpenAI(response *ChatResponse) *openai.TextResponse {
 	return &fullTextResponse
 }
 
-func streamResponseOllama2OpenAI(ollamaResponse *ChatResponse) *openai.ChatCompletionsStreamResponse {
+func streamResponseOllama2OpenAI(c *gin.Context, ollamaResponse *ChatResponse) *openai.ChatCompletionsStreamResponse {
 	var choice openai.ChatCompletionsStreamResponseChoice
 	choice.Delta.Role = ollamaResponse.Message.Role
 	choice.Delta.Content = ollamaResponse.Message.Content
@@ -92,7 +98,7 @@ func streamResponseOllama2OpenAI(ollamaResponse *ChatResponse) *openai.ChatCompl
 		choice.FinishReason = &constant.StopFinishReason
 	}
 	response := openai.ChatCompletionsStreamResponse{
-		Id:      fmt.Sprintf("chatcmpl-%s", random.GetUUID()),
+		Id:      tracing.GenerateChatCompletionID(c),
 		Object:  "chat.completion.chunk",
 		Created: helper.GetTimestamp(),
 		Model:   ollamaResponse.Model,
@@ -102,6 +108,7 @@ func streamResponseOllama2OpenAI(ollamaResponse *ChatResponse) *openai.ChatCompl
 }
 
 func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+	lg := gmw.GetLogger(c)
 	var usage model.Usage
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
@@ -121,14 +128,14 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	for scanner.Scan() {
 		data := scanner.Text()
-		if strings.HasPrefix(data, "}") {
-			data = strings.TrimPrefix(data, "}") + "}"
+		if after, ok := strings.CutPrefix(data, "}"); ok {
+			data = after + "}"
 		}
 
 		var ollamaResponse ChatResponse
 		err := json.Unmarshal([]byte(data), &ollamaResponse)
 		if err != nil {
-			logger.SysError("error unmarshalling stream response: " + err.Error())
+			lg.Error("error unmarshalling stream response", zap.Error(err))
 			continue
 		}
 
@@ -138,15 +145,15 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			usage.TotalTokens = ollamaResponse.PromptEvalCount + ollamaResponse.EvalCount
 		}
 
-		response := streamResponseOllama2OpenAI(&ollamaResponse)
+		response := streamResponseOllama2OpenAI(c, &ollamaResponse)
 		err = render.ObjectData(c, response)
 		if err != nil {
-			logger.SysError(err.Error())
+			lg.Error("error rendering response", zap.Error(err))
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		logger.SysError("error reading stream: " + err.Error())
+		lg.Error("error reading stream", zap.Error(err))
 	}
 
 	render.Done(c)
@@ -188,10 +195,11 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStat
 	if ollamaResponse.Error != "" {
 		return &model.ErrorWithStatusCode{
 			Error: model.Error{
-				Message: ollamaResponse.Error,
-				Type:    "ollama_error",
-				Param:   "",
-				Code:    "ollama_error",
+				Message:  ollamaResponse.Error,
+				Type:     model.ErrorTypeOllama,
+				Param:    "",
+				Code:     "ollama_error",
+				RawError: errors.New(ollamaResponse.Error),
 			},
 			StatusCode: resp.StatusCode,
 		}, nil
@@ -227,13 +235,12 @@ func embeddingResponseOllama2OpenAI(response *EmbeddingResponse) *openai.Embeddi
 }
 
 func Handler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
-	ctx := context.TODO()
 	var ollamaResponse ChatResponse
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
 	}
-	logger.Debugf(ctx, "ollama response: %s", string(responseBody))
+	gmw.GetLogger(c).Debug("ollama response", zap.ByteString("body", responseBody))
 	err = resp.Body.Close()
 	if err != nil {
 		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
@@ -245,15 +252,16 @@ func Handler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *
 	if ollamaResponse.Error != "" {
 		return &model.ErrorWithStatusCode{
 			Error: model.Error{
-				Message: ollamaResponse.Error,
-				Type:    "ollama_error",
-				Param:   "",
-				Code:    "ollama_error",
+				Message:  ollamaResponse.Error,
+				Type:     model.ErrorTypeOllama,
+				Param:    "",
+				Code:     "ollama_error",
+				RawError: errors.New(ollamaResponse.Error),
 			},
 			StatusCode: resp.StatusCode,
 		}, nil
 	}
-	fullTextResponse := responseOllama2OpenAI(&ollamaResponse)
+	fullTextResponse := responseOllama2OpenAI(c, &ollamaResponse)
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {
 		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil

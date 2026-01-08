@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
@@ -10,7 +10,7 @@ import {
   Modal,
 } from 'semantic-ui-react';
 import { Link } from 'react-router-dom';
-import { API, showError, showSuccess, verifyJSON } from '../helpers';
+import { API, showError, showSuccess } from '../helpers';
 import { marked } from 'marked';
 
 const OtherSetting = () => {
@@ -31,25 +31,27 @@ const OtherSetting = () => {
     content: '',
   });
 
-  const getOptions = async () => {
+  const getOptions = useCallback(async () => {
     const res = await API.get('/api/option/');
     const { success, message, data } = res.data;
     if (success) {
-      let newInputs = {};
-      data.forEach((item) => {
-        if (item.key in inputs) {
-          newInputs[item.key] = item.value;
-        }
+      setInputs((prev) => {
+        const nextInputs = { ...prev };
+        data.forEach((item) => {
+          if (item.key in nextInputs) {
+            nextInputs[item.key] = item.value;
+          }
+        });
+        return nextInputs;
       });
-      setInputs(newInputs);
     } else {
       showError(message);
     }
-  };
+  }, []);
 
   useEffect(() => {
     getOptions().then();
-  }, []);
+  }, [getOptions]);
 
   const updateOption = async (key, value) => {
     setLoading(true);
@@ -95,7 +97,7 @@ const OtherSetting = () => {
   };
 
   const openGitHubRelease = () => {
-    window.location = 'https://github.com/songquanpeng/one-api/releases/latest';
+    window.location = 'https://github.com/Laisky/one-api/releases/latest';
   };
 
   const checkUpdate = async () => {
@@ -103,8 +105,17 @@ const OtherSetting = () => {
       'https://api.github.com/repos/songquanpeng/one-api/releases/latest'
     );
     const { tag_name, body } = res.data;
-    if (tag_name === process.env.REACT_APP_VERSION) {
-      showSuccess(`已是最新版本：${tag_name}`);
+    let backendVersion = '';
+    const cachedStatus = localStorage.getItem('status');
+    if (cachedStatus) {
+      try {
+        backendVersion = JSON.parse(cachedStatus).version || '';
+      } catch (error) {
+        console.warn('Failed to parse cached status for version check:', error);
+      }
+    }
+    if (tag_name === backendVersion) {
+      showSuccess(`Is the latest version：${tag_name}`);
     } else {
       setUpdateData({
         tag_name: tag_name,
@@ -135,6 +146,11 @@ const OtherSetting = () => {
 
           <Divider />
           <Header as='h3'>{t('setting.other.system.title')}</Header>
+          <Form.Button onClick={checkUpdate}>
+            {t('setting.other.system.buttons.check_update', {
+              defaultValue: 'Check for Updates',
+            })}
+          </Form.Button>
           <Form.Group widths='equal'>
             <Form.Input
               label={t('setting.other.system.name')}
@@ -152,7 +168,7 @@ const OtherSetting = () => {
               label={
                 <label>
                   {t('setting.other.system.theme.title')}（
-                  <Link to='https://github.com/songquanpeng/one-api/blob/main/web/README.md'>
+                  <Link to='https://github.com/Laisky/one-api/blob/main/web/README.md'>
                     {t('setting.other.system.theme.link')}
                   </Link>
                   ）
@@ -229,16 +245,16 @@ const OtherSetting = () => {
         onOpen={() => setShowUpdateModal(true)}
         open={showUpdateModal}
       >
-        <Modal.Header>新版本：{updateData.tag_name}</Modal.Header>
+        <Modal.Header>New Version：{updateData.tag_name}</Modal.Header>
         <Modal.Content>
           <Modal.Description>
             <div dangerouslySetInnerHTML={{ __html: updateData.content }}></div>
           </Modal.Description>
         </Modal.Content>
         <Modal.Actions>
-          <Button onClick={() => setShowUpdateModal(false)}>关闭</Button>
+          <Button onClick={() => setShowUpdateModal(false)}>Close</Button>
           <Button
-            content='详情'
+            content='Details'
             onClick={() => {
               setShowUpdateModal(false);
               openGitHubRelease();

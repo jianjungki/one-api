@@ -1,19 +1,25 @@
 package coze
 
 import (
-	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
+
+	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
+
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/meta"
 	"github.com/songquanpeng/one-api/relay/model"
-	"io"
-	"net/http"
+	"github.com/songquanpeng/one-api/relay/relaymode"
 )
 
 type Adaptor struct {
 	meta *meta.Meta
+	adaptor.DefaultPricingMethods
 }
 
 func (a *Adaptor) Init(meta *meta.Meta) {
@@ -26,7 +32,16 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
 	adaptor.SetupCommonRequestHeader(c, req, meta)
-	req.Header.Set("Authorization", "Bearer "+meta.APIKey)
+	var err error
+	APIKey := meta.APIKey
+	if meta.Config.AuthType == OAuthJWT {
+		APIKey, err = getOAuthToken(meta.APIKey)
+		if err != nil {
+			return errors.Wrap(err, "get oauth token failed for oauth type jwt")
+		}
+	}
+
+	req.Header.Set("Authorization", "Bearer "+APIKey)
 	return nil
 }
 
@@ -38,11 +53,78 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	return ConvertRequest(*request), nil
 }
 
-func (a *Adaptor) ConvertImageRequest(request *model.ImageRequest) (any, error) {
+func (a *Adaptor) ConvertImageRequest(_ *gin.Context, request *model.ImageRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
 	return request, nil
+}
+
+func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
+	if request == nil {
+		return nil, errors.New("request is nil")
+	}
+
+	// Convert Claude Messages API request to OpenAI format first
+	openaiRequest := &model.GeneralOpenAIRequest{
+		Model:       request.Model,
+		MaxTokens:   request.MaxTokens,
+		Temperature: request.Temperature,
+		TopP:        request.TopP,
+		Stream:      request.Stream != nil && *request.Stream,
+		Stop:        request.StopSequences,
+		User:        a.meta.Config.UserID, // Coze requires UserID
+	}
+
+	// Add system message if present
+	if request.System != "" {
+		systemMessage := model.Message{
+			Role:    "system",
+			Content: request.System,
+		}
+		openaiRequest.Messages = append(openaiRequest.Messages, systemMessage)
+	}
+
+	// Convert messages
+	for _, msg := range request.Messages {
+		openaiMessage := model.Message{
+			Role: msg.Role,
+		}
+
+		// Convert content based on type
+		switch content := msg.Content.(type) {
+		case string:
+			openaiMessage.Content = content
+		case []any:
+			// Extract text from structured content (Coze mainly supports text)
+			var textParts []string
+			for _, block := range content {
+				if blockMap, ok := block.(map[string]any); ok {
+					if blockType, exists := blockMap["type"]; exists && blockType == "text" {
+						if text, exists := blockMap["text"]; exists {
+							if textStr, ok := text.(string); ok {
+								textParts = append(textParts, textStr)
+							}
+						}
+					}
+				}
+			}
+			if len(textParts) > 0 {
+				openaiMessage.Content = strings.Join(textParts, "\n")
+			}
+		default:
+			openaiMessage.Content = fmt.Sprintf("%v", content)
+		}
+
+		openaiRequest.Messages = append(openaiRequest.Messages, openaiMessage)
+	}
+
+	// Mark this as a Claude Messages conversion for response handling
+	c.Set(ctxkey.ClaudeMessagesConversion, true)
+	c.Set(ctxkey.OriginalClaudeRequest, request)
+
+	// Now convert using Coze's existing logic
+	return a.ConvertRequest(c, relaymode.ChatCompletions, openaiRequest)
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
@@ -67,9 +149,37 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 }
 
 func (a *Adaptor) GetModelList() []string {
-	return ModelList
+	return adaptor.GetModelListFromPricing(ModelRatios)
 }
 
 func (a *Adaptor) GetChannelName() string {
 	return "coze"
+}
+
+// GetDefaultModelPricing returns the pricing information for Coze models
+func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
+	return ModelRatios
+}
+
+func (a *Adaptor) GetModelRatio(modelName string) float64 {
+	pricing := a.GetDefaultModelPricing()
+	if price, exists := pricing[modelName]; exists {
+		return price.Ratio
+	}
+	// Use default fallback from DefaultPricingMethods
+	return a.DefaultPricingMethods.GetModelRatio(modelName)
+}
+
+func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
+	pricing := a.GetDefaultModelPricing()
+	if price, exists := pricing[modelName]; exists {
+		return price.CompletionRatio
+	}
+	// Use default fallback from DefaultPricingMethods
+	return a.DefaultPricingMethods.GetCompletionRatio(modelName)
+}
+
+// DefaultToolingConfig returns Coze's tooling defaults (no per-call metering published as of 2025-11-12).
+func (a *Adaptor) DefaultToolingConfig() adaptor.ChannelToolConfig {
+	return CozeToolingDefaults
 }

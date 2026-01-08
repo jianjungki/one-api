@@ -4,17 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/i18n"
 	"github.com/songquanpeng/one-api/common/message"
 	"github.com/songquanpeng/one-api/model"
-
-	"github.com/gin-gonic/gin"
 )
 
+// GetStatus returns application metadata and feature toggles for the public status endpoint.
 func GetStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -46,9 +47,9 @@ func GetStatus(c *gin.Context) {
 			"oidc_userinfo_endpoint":      config.OidcUserinfoEndpoint,
 		},
 	})
-	return
 }
 
+// GetNotice returns the configured notice content for the UI.
 func GetNotice(c *gin.Context) {
 	config.OptionMapRWMutex.RLock()
 	defer config.OptionMapRWMutex.RUnlock()
@@ -57,9 +58,9 @@ func GetNotice(c *gin.Context) {
 		"message": "",
 		"data":    config.OptionMap["Notice"],
 	})
-	return
 }
 
+// GetAbout returns the configured about content for the UI.
 func GetAbout(c *gin.Context) {
 	config.OptionMapRWMutex.RLock()
 	defer config.OptionMapRWMutex.RUnlock()
@@ -68,9 +69,9 @@ func GetAbout(c *gin.Context) {
 		"message": "",
 		"data":    config.OptionMap["About"],
 	})
-	return
 }
 
+// GetHomePageContent returns the configured homepage content block.
 func GetHomePageContent(c *gin.Context) {
 	config.OptionMapRWMutex.RLock()
 	defer config.OptionMapRWMutex.RUnlock()
@@ -79,15 +80,15 @@ func GetHomePageContent(c *gin.Context) {
 		"message": "",
 		"data":    config.OptionMap["HomePageContent"],
 	})
-	return
 }
 
+// SendEmailVerification issues a verification code to the provided email address.
 func SendEmailVerification(c *gin.Context) {
 	email := c.Query("email")
 	if err := common.Validate.Var(email, "required,email"); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": i18n.Translate(c, "invalid_parameter"),
+			"message": invalidParameterMessage,
 		})
 		return
 	}
@@ -102,7 +103,7 @@ func SendEmailVerification(c *gin.Context) {
 		if !allowed {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
-				"message": "管理员启用了邮箱域名白名单，您的邮箱地址的域名不在白名单中",
+				"message": "Administrator has enabled email domain whitelist, your email domain is not in the whitelist",
 			})
 			return
 		}
@@ -110,21 +111,21 @@ func SendEmailVerification(c *gin.Context) {
 	if model.IsEmailAlreadyTaken(email) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "邮箱地址已被占用",
+			"message": "Email address is occupied",
 		})
 		return
 	}
 	code := common.GenerateVerificationCode(6)
 	common.RegisterVerificationCodeWithKey(email, code, common.EmailVerificationPurpose)
-	subject := fmt.Sprintf("%s 邮箱验证邮件", config.SystemName)
+	subject := fmt.Sprintf("%s Email Verification", config.SystemName)
 	content := message.EmailTemplate(
 		subject,
 		fmt.Sprintf(`
-			<p>您好！</p>
-			<p>您正在进行 %s 邮箱验证。</p>
-			<p>您的验证码为：</p>
+			<p>Hello!</p>
+			<p>You are verifying your email for %s.</p>
+			<p>Your verification code is:</p>
 			<p style="font-size: 24px; font-weight: bold; color: #333; background-color: #f8f8f8; padding: 10px; text-align: center; border-radius: 4px;">%s</p>
-			<p style="color: #666;">验证码 %d 分钟内有效，如果不是本人操作，请忽略。</p>
+			<p style="color: #666;">The verification code is valid for %d minutes. If you did not request this, please ignore.</p>
 		`, config.SystemName, code, common.VerificationValidMinutes),
 	)
 	err := message.SendEmail(subject, email, content)
@@ -139,22 +140,22 @@ func SendEmailVerification(c *gin.Context) {
 		"success": true,
 		"message": "",
 	})
-	return
 }
 
+// SendPasswordResetEmail sends a password reset link to the supplied email address when registered.
 func SendPasswordResetEmail(c *gin.Context) {
 	email := c.Query("email")
 	if err := common.Validate.Var(email, "required,email"); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": i18n.Translate(c, "invalid_parameter"),
+			"message": invalidParameterMessage,
 		})
 		return
 	}
 	if !model.IsEmailAlreadyTaken(email) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "该邮箱地址未注册",
+			"message": "The email address is not registered",
 		})
 		return
 	}
@@ -165,22 +166,22 @@ func SendPasswordResetEmail(c *gin.Context) {
 	content := message.EmailTemplate(
 		subject,
 		fmt.Sprintf(`
-			<p>您好！</p>
-			<p>您正在进行 %s 密码重置。</p>
-			<p>请点击下面的按钮进行密码重置：</p>
+			<p>Hello!</p>
+			<p>You are resetting your password for %s.</p>
+			<p>Please click the button below to reset your password:</p>
 			<p style="text-align: center; margin: 30px 0;">
-				<a href="%s" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">重置密码</a>
+				<a href="%s" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Reset Password</a>
 			</p>
-			<p style="color: #666;">如果按钮无法点击，请复制以下链接到浏览器中打开：</p>
+			<p style="color: #666;">If the button doesn't work, please copy the following link and paste it into your browser:</p>
 			<p style="background-color: #f8f8f8; padding: 10px; border-radius: 4px; word-break: break-all;">%s</p>
-			<p style="color: #666;">重置链接 %d 分钟内有效，如果不是本人操作，请忽略。</p>
+			<p style="color: #666;">The reset link is valid for %d minutes. If you didn't request this, please ignore.</p>
 		`, config.SystemName, link, link, common.VerificationValidMinutes),
 	)
 	err := message.SendEmail(subject, email, content)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": fmt.Sprintf("%s%s", i18n.Translate(c, "send_email_failed"), err.Error()),
+			"message": sendEmailFailedPrefix + err.Error(),
 		})
 		return
 	}
@@ -188,7 +189,6 @@ func SendPasswordResetEmail(c *gin.Context) {
 		"success": true,
 		"message": "",
 	})
-	return
 }
 
 type PasswordResetRequest struct {
@@ -196,20 +196,21 @@ type PasswordResetRequest struct {
 	Token string `json:"token"`
 }
 
+// ResetPassword validates the reset token and assigns a new random password to the account.
 func ResetPassword(c *gin.Context) {
 	var req PasswordResetRequest
 	err := json.NewDecoder(c.Request.Body).Decode(&req)
 	if req.Email == "" || req.Token == "" {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": i18n.Translate(c, "invalid_parameter"),
+			"message": invalidParameterMessage,
 		})
 		return
 	}
 	if !common.VerifyCodeWithKey(req.Email, req.Token, common.PasswordResetPurpose) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "重置链接非法或已过期",
+			"message": "Reset link is illegal or expired",
 		})
 		return
 	}
@@ -228,5 +229,86 @@ func ResetPassword(c *gin.Context) {
 		"message": "",
 		"data":    password,
 	})
-	return
+}
+
+// GetChannelStatus returns a paginated view of channel health and recent test metrics.
+func GetChannelStatus(c *gin.Context) {
+	// Parse pagination parameters
+	p, _ := strconv.Atoi(c.Query("p"))
+	if p < 0 {
+		p = 0
+	}
+
+	// Get page size from query parameter, default to 6 as requested
+	size, _ := strconv.Atoi(c.Query("size"))
+	if size <= 0 {
+		size = 6 // Default to 6 channels per page as requested
+	}
+	if size > config.MaxItemsPerPage {
+		size = config.MaxItemsPerPage
+	}
+
+	// Get channels with pagination for monitoring
+	channels, err := model.GetAllChannels(p*size, size, "all", "", "")
+	if err != nil {
+		// Return a generic "Internal Server Error" as per best practices,
+		// since database errors are rare and typically indicate an internal issue.
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	// Get total count for pagination
+	totalCount, err := model.GetChannelCount()
+	if err != nil {
+		// Return a generic "Internal Server Error" as per best practices,
+		// since database errors are rare and typically indicate an internal issue.
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	// Format channels for monitoring
+	var channelStatuses []gin.H
+	for _, channel := range channels {
+		var status string
+		var enabled bool
+
+		switch channel.Status {
+		case 1: // ChannelStatusEnabled
+			status = "enabled"
+			enabled = true
+		case 2: // ChannelStatusManuallyDisabled
+			status = "manually_disabled"
+			enabled = false
+		case 3: // ChannelStatusAutoDisabled
+			status = "auto_disabled"
+			enabled = false
+		default: // ChannelStatusUnknown
+			status = "unknown"
+			enabled = false
+		}
+
+		channelStatus := gin.H{
+			"name":    channel.Name,
+			"status":  status,
+			"enabled": enabled,
+			"response": gin.H{
+				"response_time_ms": channel.ResponseTime,
+				"test_time":        channel.TestTime,
+				"created_time":     channel.CreatedTime,
+			},
+		}
+		channelStatuses = append(channelStatuses, channelStatus)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    channelStatuses,
+		"total":   totalCount,
+	})
 }

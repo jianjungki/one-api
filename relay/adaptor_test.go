@@ -1,14 +1,16 @@
 package relay
 
 import (
-	. "github.com/smartystreets/goconvey/convey"
-	"github.com/songquanpeng/one-api/relay/apitype"
 	"testing"
+
+	. "github.com/smartystreets/goconvey/convey"
+
+	"github.com/songquanpeng/one-api/relay/apitype"
 )
 
 func TestGetAdaptor(t *testing.T) {
 	Convey("get adaptor", t, func() {
-		for i := 0; i < apitype.Dummy; i++ {
+		for i := range apitype.Dummy {
 			a := GetAdaptor(i)
 			So(a, ShouldNotBeNil)
 		}

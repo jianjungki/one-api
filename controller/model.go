@@ -1,18 +1,30 @@
 package controller
 
 import (
+	"context"
 	"fmt"
+	"net/http"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	gutils "github.com/Laisky/go-utils/v6"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/singleflight"
+
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/middleware"
 	"github.com/songquanpeng/one-api/model"
 	relay "github.com/songquanpeng/one-api/relay"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/relay/apitype"
+	"github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/songquanpeng/one-api/relay/meta"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"net/http"
-	"strings"
 )
 
 // https://platform.openai.com/docs/api-reference/models/list
@@ -33,18 +45,33 @@ type OpenAIModelPermission struct {
 }
 
 type OpenAIModels struct {
-	Id         string                  `json:"id"`
-	Object     string                  `json:"object"`
-	Created    int                     `json:"created"`
+	// Id model's name
+	//
+	// BUG: Different channels may have the same model name
+	Id      string `json:"id"`
+	Object  string `json:"object"`
+	Created int    `json:"created"`
+	// OwnedBy is the channel's adaptor name
 	OwnedBy    string                  `json:"owned_by"`
 	Permission []OpenAIModelPermission `json:"permission"`
 	Root       string                  `json:"root"`
 	Parent     *string                 `json:"parent"`
 }
 
-var models []OpenAIModels
-var modelsMap map[string]OpenAIModels
-var channelId2Models map[int][]string
+// BUG(#39): 更新 custom channel 时，应该同步更新所有自定义的 models 到 allModels
+var (
+	allModels               []OpenAIModels
+	modelsMap               map[string]OpenAIModels
+	channelId2Models        map[int][]string
+	defaultModelPermissions []OpenAIModelPermission
+)
+
+// Anonymous models display cache (1-minute TTL) to avoid repeated heavy loads.
+// Keyed by normalized keyword filter.
+var (
+	anonymousModelsDisplayCache = gutils.NewExpCache[map[string]ChannelModelsDisplayInfo](context.Background(), time.Minute)
+	anonymousModelsDisplayGroup singleflight.Group
+)
 
 func init() {
 	var permission []OpenAIModelPermission
@@ -62,16 +89,21 @@ func init() {
 		Group:              nil,
 		IsBlocking:         false,
 	})
+	defaultModelPermissions = append([]OpenAIModelPermission(nil), permission...)
 	// https://platform.openai.com/docs/models/model-endpoint-compatibility
-	for i := 0; i < apitype.Dummy; i++ {
+	for i := range apitype.Dummy {
 		if i == apitype.AIProxyLibrary {
 			continue
 		}
 		adaptor := relay.GetAdaptor(i)
+		if adaptor == nil {
+			continue
+		}
+
 		channelName := adaptor.GetChannelName()
 		modelNames := adaptor.GetModelList()
 		for _, modelName := range modelNames {
-			models = append(models, OpenAIModels{
+			allModels = append(allModels, OpenAIModels{
 				Id:         modelName,
 				Object:     "model",
 				Created:    1626777600,
@@ -88,7 +120,7 @@ func init() {
 		}
 		channelName, channelModelList := openai.GetCompatibleChannelMeta(channelType)
 		for _, modelName := range channelModelList {
-			models = append(models, OpenAIModels{
+			allModels = append(allModels, OpenAIModels{
 				Id:         modelName,
 				Object:     "model",
 				Created:    1626777600,
@@ -100,12 +132,16 @@ func init() {
 		}
 	}
 	modelsMap = make(map[string]OpenAIModels)
-	for _, model := range models {
+	for _, model := range allModels {
 		modelsMap[model.Id] = model
 	}
 	channelId2Models = make(map[int][]string)
 	for i := 1; i < channeltype.Dummy; i++ {
 		adaptor := relay.GetAdaptor(channeltype.ToAPIType(i))
+		if adaptor == nil {
+			continue
+		}
+
 		meta := &meta.Meta{
 			ChannelType: i,
 		}
@@ -114,6 +150,7 @@ func init() {
 	}
 }
 
+// DashboardListModels returns the complete channel-to-model mapping for administrative dashboards.
 func DashboardListModels(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -122,73 +159,568 @@ func DashboardListModels(c *gin.Context) {
 	})
 }
 
+type listAllModelsCacheEntry struct {
+	Models  []OpenAIModels
+	Version string
+}
+
+// cachedListAllModels is a short-term cache for ListAllModels to reduce load.
+var cachedListAllModels = gutils.NewSingleItemExpCache[listAllModelsCacheEntry](time.Minute)
+
+// ListAllModels returns every known model in the OpenAI-compatible format regardless of user permissions.
 func ListAllModels(c *gin.Context) {
-	c.JSON(200, gin.H{
+	models, err := getSupportedModelsSnapshot()
+	if err != nil {
+		middleware.AbortWithError(c, http.StatusInternalServerError, errors.Wrap(err, "load supported models"))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
 		"object": "list",
 		"data":   models,
 	})
 }
 
+func getSupportedModelsSnapshot() ([]OpenAIModels, error) {
+	version, err := model.GetEnabledChannelsVersionSignature()
+	if err != nil {
+		return nil, errors.Wrap(err, "channels version signature")
+	}
+
+	if entry, ok := cachedListAllModels.Get(); ok && entry.Version == version {
+		return entry.Models, nil
+	}
+
+	models, err := listAllSupportedModels()
+	if err != nil {
+		return nil, errors.Wrap(err, "list models")
+	}
+
+	cachedListAllModels.Set(listAllModelsCacheEntry{
+		Models:  models,
+		Version: version,
+	})
+
+	return models, nil
+}
+
+// ModelsDisplayResponse represents the response structure for the models display page
+type ModelsDisplayResponse struct {
+	Success bool                                `json:"success"`
+	Message string                              `json:"message"`
+	Data    map[string]ChannelModelsDisplayInfo `json:"data"`
+}
+
+// ChannelModelsDisplayInfo represents model information for a specific channel/adaptor
+type ChannelModelsDisplayInfo struct {
+	ChannelName string                      `json:"channel_name"`
+	ChannelType int                         `json:"channel_type"`
+	Models      map[string]ModelDisplayInfo `json:"models"`
+}
+
+// ModelDisplayInfo represents display information for a single model
+type ModelDisplayInfo struct {
+	InputPrice       float64 `json:"input_price"`           // Price per 1M input tokens in USD
+	CachedInputPrice float64 `json:"cached_input_price"`    // Price per 1M cached input tokens in USD (falls back to input price when unspecified)
+	OutputPrice      float64 `json:"output_price"`          // Price per 1M output tokens in USD
+	MaxTokens        int32   `json:"max_tokens"`            // Maximum tokens limit, 0 means unlimited
+	ImagePrice       float64 `json:"image_price,omitempty"` // USD per image (image models only)
+}
+
+// mergeModelNamesWithOverrides merges explicit channel models with pricing override entries, removing duplicates.
+func mergeModelNamesWithOverrides(base []string, overrides map[string]model.ModelConfigLocal) []string {
+	seen := make(map[string]struct{}, len(base))
+	merged := make([]string, 0, len(base))
+	for _, raw := range base {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		if _, ok := seen[lower]; ok {
+			continue
+		}
+		seen[lower] = struct{}{}
+		merged = append(merged, trimmed)
+	}
+	for raw := range overrides {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		if _, ok := seen[lower]; ok {
+			continue
+		}
+		seen[lower] = struct{}{}
+		merged = append(merged, trimmed)
+	}
+	return merged
+}
+
+// listAllSupportedModels builds a snapshot of every supported model, including admin-defined channel entries.
+//
+// TRADE OFF: deduplicate by case-insensitive model name, could miss some models with same name but different channels.
+func listAllSupportedModels() ([]OpenAIModels, error) {
+	models := make([]OpenAIModels, 0, len(allModels))
+	seen := make(map[string]struct{}, len(allModels))
+	for _, base := range allModels {
+		models = append(models, base)
+		seen[strings.ToLower(base.Id)] = struct{}{}
+	}
+	channels, err := model.GetAllEnabledChannels()
+	if err != nil {
+		return nil, err
+	}
+	created := int(time.Now().Unix())
+	for _, ch := range channels {
+		overrides := ch.GetModelPriceConfigs()
+		names := mergeModelNamesWithOverrides(ch.GetSupportedModelNames(), overrides)
+		if len(names) == 0 {
+			continue
+		}
+		owner := channeltype.IdToName(ch.Type)
+		if owner == "" {
+			owner = fmt.Sprintf("channel-%d", ch.Id)
+		}
+		for _, name := range names {
+			trimmed := strings.TrimSpace(name)
+			if trimmed == "" {
+				continue
+			}
+			lower := strings.ToLower(trimmed)
+			if _, exists := seen[lower]; exists {
+				continue
+			}
+			entry := OpenAIModels{
+				Id:         trimmed,
+				Object:     "model",
+				Created:    created,
+				OwnedBy:    owner,
+				Permission: defaultModelPermissions,
+				Root:       trimmed,
+				Parent:     nil,
+			}
+			models = append(models, entry)
+			seen[lower] = struct{}{}
+		}
+	}
+	sort.Slice(models, func(i, j int) bool {
+		return models[i].Id < models[j].Id
+	})
+	return models, nil
+}
+
+// GetModelsDisplay returns models available to the current user grouped by channel/adaptor with pricing information
+// This endpoint is designed for the Models display page in the frontend
+func GetModelsDisplay(c *gin.Context) {
+	// If logged-in, filter by user's allowed models; otherwise, show all supported models grouped by channel type
+	userId := c.GetInt(ctxkey.Id)
+	keyword := strings.ToLower(strings.TrimSpace(c.Query("keyword")))
+	lg := gmw.GetLogger(c)
+
+	// Helper to build pricing info map for a channel with given model names
+	convertRatioToPrice := func(r float64) float64 {
+		if r <= 0 {
+			return 0
+		}
+		if r < 0.001 {
+			return r * 1_000_000
+		}
+		return (r * 1_000_000) / ratio.QuotaPerUsd
+	}
+
+	buildChannelModels := func(channel *model.Channel, modelNames []string, overrides map[string]model.ModelConfigLocal) map[string]ModelDisplayInfo {
+		result := make(map[string]ModelDisplayInfo)
+		// Get adaptor for this channel type (fallback to OpenAI for unsupported/custom)
+		adaptor := relay.GetAdaptor(channeltype.ToAPIType(channel.Type))
+		if adaptor == nil {
+			adaptor = relay.GetAdaptor(apitype.OpenAI)
+			if adaptor == nil {
+				return result
+			}
+		}
+		m := &meta.Meta{ChannelType: channel.Type}
+		adaptor.Init(m)
+
+		pricing := adaptor.GetDefaultModelPricing()
+		modelMapping := channel.GetModelMapping()
+		getOverride := func(key string) (*model.ModelConfigLocal, bool) {
+			if overrides == nil {
+				return nil, false
+			}
+			cfg, ok := overrides[key]
+			if !ok {
+				return nil, false
+			}
+			copied := cfg
+			return &copied, true
+		}
+
+		for _, rawName := range modelNames {
+			modelName := strings.TrimSpace(rawName)
+			if modelName == "" {
+				continue
+			}
+			if !channel.SupportsModel(modelName) {
+				continue
+			}
+			if keyword != "" && !strings.Contains(strings.ToLower(modelName), keyword) {
+				continue
+			}
+			// resolve mapped model for pricing
+			actual := modelName
+			if modelMapping != nil {
+				if mapped, ok := modelMapping[modelName]; ok && mapped != "" {
+					actual = mapped
+				}
+			}
+
+			var inputPrice, cachedInputPrice, outputPrice float64
+			var maxTokens int32
+			var imagePrice float64
+			baseCompletionRatio := 0.0
+			overrideApplied := false
+
+			if cfg, ok := pricing[actual]; ok {
+				if cfg.Image != nil && cfg.Image.PricePerImageUsd > 0 && cfg.Ratio == 0 && cfg.CachedInputRatio <= 0 {
+					result[modelName] = ModelDisplayInfo{
+						MaxTokens:        cfg.MaxTokens,
+						ImagePrice:       cfg.Image.PricePerImageUsd,
+						InputPrice:       0,
+						CachedInputPrice: 0,
+					}
+					continue
+				}
+				inputPrice = convertRatioToPrice(cfg.Ratio)
+				cachedInputPrice = inputPrice
+				if cfg.CachedInputRatio != 0 {
+					cachedInputPrice = convertRatioToPrice(cfg.CachedInputRatio)
+					if inputPrice == 0 && cfg.CachedInputRatio > 0 {
+						if lg != nil {
+							lg.Debug("model display fell back to cached input ratio",
+								zap.String("channel", channel.Name),
+								zap.String("resolved_model", actual),
+								zap.Float64("cached_ratio", cfg.CachedInputRatio))
+						}
+						inputPrice = cachedInputPrice
+					}
+				}
+				baseCompletionRatio = cfg.CompletionRatio
+				outputPrice = inputPrice * cfg.CompletionRatio
+				maxTokens = cfg.MaxTokens
+				if cfg.Image != nil {
+					imagePrice = cfg.Image.PricePerImageUsd
+				}
+			} else {
+				inRatio := adaptor.GetModelRatio(actual)
+				compRatio := adaptor.GetCompletionRatio(actual)
+				inputPrice = convertRatioToPrice(inRatio)
+				cachedInputPrice = inputPrice
+				outputPrice = inputPrice * compRatio
+				baseCompletionRatio = compRatio
+				maxTokens = 0
+				imagePrice = 0
+			}
+
+			if cfg, ok := getOverride(modelName); ok {
+				overrideApplied = true
+				if cfg.MaxTokens != 0 {
+					maxTokens = cfg.MaxTokens
+				}
+				if cfg.Ratio != 0 {
+					inputPrice = convertRatioToPrice(cfg.Ratio)
+					cachedInputPrice = inputPrice
+					if cfg.CompletionRatio != 0 {
+						outputPrice = inputPrice * cfg.CompletionRatio
+					} else if baseCompletionRatio != 0 {
+						outputPrice = inputPrice * baseCompletionRatio
+					} else if outputPrice == 0 {
+						outputPrice = inputPrice
+					}
+				} else if cfg.CompletionRatio != 0 && inputPrice > 0 {
+					outputPrice = inputPrice * cfg.CompletionRatio
+				}
+				if cfg.Image != nil && cfg.Image.PricePerImageUsd > 0 {
+					imagePrice = cfg.Image.PricePerImageUsd
+				}
+			}
+			if !overrideApplied && actual != modelName {
+				if cfg, ok := getOverride(actual); ok {
+					overrideApplied = true
+					if cfg.MaxTokens != 0 {
+						maxTokens = cfg.MaxTokens
+					}
+					if cfg.Ratio != 0 {
+						inputPrice = convertRatioToPrice(cfg.Ratio)
+						cachedInputPrice = inputPrice
+						if cfg.CompletionRatio != 0 {
+							outputPrice = inputPrice * cfg.CompletionRatio
+						} else if baseCompletionRatio != 0 {
+							outputPrice = inputPrice * baseCompletionRatio
+						} else if outputPrice == 0 {
+							outputPrice = inputPrice
+						}
+					} else if cfg.CompletionRatio != 0 && inputPrice > 0 {
+						outputPrice = inputPrice * cfg.CompletionRatio
+					}
+					if cfg.Image != nil && cfg.Image.PricePerImageUsd > 0 {
+						imagePrice = cfg.Image.PricePerImageUsd
+					}
+				}
+			}
+
+			result[modelName] = ModelDisplayInfo{
+				InputPrice:       inputPrice,
+				CachedInputPrice: cachedInputPrice,
+				OutputPrice:      outputPrice,
+				MaxTokens:        maxTokens,
+				ImagePrice:       imagePrice,
+			}
+			if inputPrice == 0 && cachedInputPrice == 0 && outputPrice == 0 && imagePrice == 0 && lg != nil {
+				lg.Debug("model display missing pricing metadata",
+					zap.String("channel", channel.Name),
+					zap.String("model", modelName),
+					zap.String("resolved_model", actual),
+					zap.Bool("override_applied", overrideApplied))
+			}
+		}
+		return result
+	}
+
+	// If userId is zero, treat as anonymous: list all channels and their supported models from DB and adaptor
+	if userId == 0 {
+		// Anonymous path with cache + singleflight to mitigate DB load and thundering herd
+		cacheKey := "kw:" + keyword
+		if data, ok := anonymousModelsDisplayCache.Load(cacheKey); ok {
+			c.JSON(http.StatusOK, ModelsDisplayResponse{Success: true, Message: "", Data: data})
+			return
+		}
+
+		v, err, _ := anonymousModelsDisplayGroup.Do(cacheKey, func() (any, error) {
+			channels, err := model.GetAllEnabledChannels()
+			if err != nil {
+				return nil, errors.Wrap(err, "get all enabled channels")
+			}
+			result := make(map[string]ChannelModelsDisplayInfo)
+			for _, ch := range channels {
+				overrides := ch.GetModelPriceConfigs()
+				supported := mergeModelNamesWithOverrides(ch.GetSupportedModelNames(), overrides)
+				if len(supported) == 0 {
+					continue
+				}
+				modelInfos := buildChannelModels(ch, supported, overrides)
+				if len(modelInfos) == 0 {
+					continue
+				}
+				key := fmt.Sprintf("%s:%s", channeltype.IdToName(ch.Type), ch.Name)
+				result[key] = ChannelModelsDisplayInfo{ChannelName: key, ChannelType: ch.Type, Models: modelInfos}
+			}
+			anonymousModelsDisplayCache.Store(cacheKey, result)
+			return result, nil
+		})
+		if err != nil {
+			c.JSON(http.StatusOK, ModelsDisplayResponse{Success: false, Message: "Failed to load channels: " + err.Error()})
+			return
+		}
+		data := v.(map[string]ChannelModelsDisplayInfo)
+		c.JSON(http.StatusOK, ModelsDisplayResponse{Success: true, Message: "", Data: data})
+		return
+	}
+
+	// Logged-in path: show only models allowed for the user group
+	ctx := gmw.Ctx(c)
+	userGroup, err := model.CacheGetUserGroup(ctx, userId)
+	if err != nil {
+		c.JSON(http.StatusOK, ModelsDisplayResponse{Success: false, Message: "Failed to get user group: " + err.Error()})
+		return
+	}
+	abilities, err := model.CacheGetGroupModelsV2(ctx, userGroup)
+	if err != nil {
+		c.JSON(http.StatusOK, ModelsDisplayResponse{Success: false, Message: "Failed to get available models: " + err.Error()})
+		return
+	}
+
+	result := make(map[string]ChannelModelsDisplayInfo)
+	// Group abilities by channel ID and deduplicate models
+	ch2models := make(map[int]map[string]struct{})
+	for _, ab := range abilities {
+		if _, ok := ch2models[ab.ChannelId]; !ok {
+			ch2models[ab.ChannelId] = make(map[string]struct{})
+		}
+		ch2models[ab.ChannelId][ab.Model] = struct{}{}
+	}
+	for chID, modelSet := range ch2models {
+		ch, err := model.GetChannelById(chID, true)
+		if err != nil {
+			continue
+		}
+		overrides := ch.GetModelPriceConfigs()
+		models := make([]string, 0, len(modelSet))
+		for m := range modelSet {
+			if ch.SupportsModel(m) {
+				models = append(models, m)
+			}
+		}
+		if len(models) == 0 {
+			continue
+		}
+		sort.Strings(models)
+		infos := buildChannelModels(ch, models, overrides)
+		if len(infos) == 0 {
+			continue
+		}
+		key := fmt.Sprintf("%s:%s", channeltype.IdToName(ch.Type), ch.Name)
+		result[key] = ChannelModelsDisplayInfo{ChannelName: key, ChannelType: ch.Type, Models: infos}
+	}
+
+	c.JSON(http.StatusOK, ModelsDisplayResponse{Success: true, Message: "", Data: result})
+}
+
+// ListModels lists all models available to the user.
 func ListModels(c *gin.Context) {
-	ctx := c.Request.Context()
-	var availableModels []string
-	if c.GetString(ctxkey.AvailableModels) != "" {
-		availableModels = strings.Split(c.GetString(ctxkey.AvailableModels), ",")
-	} else {
-		userId := c.GetInt(ctxkey.Id)
-		userGroup, _ := model.CacheGetUserGroup(userId)
-		availableModels, _ = model.CacheGetGroupModels(ctx, userGroup)
+	userId := c.GetInt(ctxkey.Id)
+	ctx := gmw.Ctx(c)
+	lg := gmw.GetLogger(c)
+
+	userGroup, err := model.CacheGetUserGroup(ctx, userId)
+	if err != nil {
+		middleware.AbortWithError(c, http.StatusBadRequest, err)
+		return
 	}
-	modelSet := make(map[string]bool)
-	for _, availableModel := range availableModels {
-		modelSet[availableModel] = true
+
+	availableAbilities, err := model.CacheGetGroupModelsV2(ctx, userGroup)
+	if err != nil {
+		middleware.AbortWithError(c, http.StatusBadRequest, err)
+		return
 	}
-	availableOpenAIModels := make([]OpenAIModels, 0)
-	for _, model := range models {
-		if _, ok := modelSet[model.Id]; ok {
-			modelSet[model.Id] = false
-			availableOpenAIModels = append(availableOpenAIModels, model)
+
+	snapshot, err := getSupportedModelsSnapshot()
+	if err != nil {
+		middleware.AbortWithError(c, http.StatusInternalServerError, errors.Wrap(err, "load supported models snapshot"))
+		return
+	}
+
+	snapshotByID := make(map[string]OpenAIModels, len(snapshot))
+	for _, model := range snapshot {
+		key := strings.ToLower(model.Id)
+		snapshotByID[key] = model
+	}
+
+	allowed := make(map[string]OpenAIModels, len(availableAbilities))
+	channelCache := make(map[int]*model.Channel)
+	created := int(time.Now().Unix())
+
+	for _, ability := range availableAbilities {
+		modelName := strings.TrimSpace(ability.Model)
+		if modelName == "" {
+			continue
 		}
-	}
-	for modelName, ok := range modelSet {
+		key := strings.ToLower(modelName)
+		if entry, ok := snapshotByID[key]; ok {
+			allowed[key] = entry
+			continue
+		}
+
+		entry, ok := buildModelEntryFromAbility(modelName, ability.ChannelId, ability.ChannelType, created, channelCache)
 		if ok {
-			availableOpenAIModels = append(availableOpenAIModels, OpenAIModels{
-				Id:      modelName,
-				Object:  "model",
-				Created: 1626777600,
-				OwnedBy: "custom",
-				Root:    modelName,
-				Parent:  nil,
-			})
+			allowed[key] = entry
+			continue
+		}
+		if lg != nil {
+			lg.Debug("unable to build model entry for ability",
+				zap.String("model", modelName),
+				zap.Int("channel_id", ability.ChannelId),
+				zap.Int("channel_type", ability.ChannelType))
 		}
 	}
-	c.JSON(200, gin.H{
+
+	userAvailableModels := make([]OpenAIModels, 0, len(allowed))
+	for _, model := range allowed {
+		userAvailableModels = append(userAvailableModels, model)
+	}
+
+	sort.Slice(userAvailableModels, func(i, j int) bool {
+		return userAvailableModels[i].Id < userAvailableModels[j].Id
+	})
+
+	c.JSON(http.StatusOK, gin.H{
 		"object": "list",
-		"data":   availableOpenAIModels,
+		"data":   userAvailableModels,
 	})
 }
 
+func buildModelEntryFromAbility(modelName string, channelID int, channelType int, created int, cache map[int]*model.Channel) (OpenAIModels, bool) {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		return OpenAIModels{}, false
+	}
+
+	owner := channeltype.IdToName(channelType)
+	if channelID > 0 {
+		if channel, ok := cache[channelID]; ok {
+			owner = channeltype.IdToName(channel.Type)
+			if owner == "" || owner == "unknown" {
+				owner = fmt.Sprintf("channel-%d", channel.Id)
+			}
+		} else {
+			channel, err := model.GetChannelById(channelID, false)
+			if err == nil {
+				cache[channelID] = channel
+				owner = channeltype.IdToName(channel.Type)
+				if owner == "" || owner == "unknown" {
+					owner = fmt.Sprintf("channel-%d", channel.Id)
+				}
+			} else if owner == "" {
+				owner = fmt.Sprintf("channel-%d", channelID)
+			}
+		}
+	}
+	if owner == "" {
+		owner = "unknown"
+	}
+
+	return OpenAIModels{
+		Id:         modelName,
+		Object:     "model",
+		Created:    created,
+		OwnedBy:    owner,
+		Permission: defaultModelPermissions,
+		Root:       modelName,
+		Parent:     nil,
+	}, true
+}
+
+// RetrieveModel returns details about a specific model or an error when it does not exist.
 func RetrieveModel(c *gin.Context) {
 	modelId := c.Param("model")
 	if model, ok := modelsMap[modelId]; ok {
-		c.JSON(200, model)
-	} else {
-		Error := relaymodel.Error{
-			Message: fmt.Sprintf("The model '%s' does not exist", modelId),
-			Type:    "invalid_request_error",
-			Param:   "model",
-			Code:    "model_not_found",
-		}
-		c.JSON(200, gin.H{
-			"error": Error,
-		})
+		c.JSON(http.StatusOK, model)
+		return
 	}
+	lg := gmw.GetLogger(c)
+	if snapshot, err := listAllSupportedModels(); err == nil {
+		for _, m := range snapshot {
+			if strings.EqualFold(m.Id, modelId) {
+				c.JSON(http.StatusOK, m)
+				return
+			}
+		}
+	} else if lg != nil {
+		lg.Debug("failed to build supported models snapshot for lookup", zap.Error(err))
+	}
+	msg := fmt.Sprintf("The model '%s' does not exist", modelId)
+	Error := relaymodel.Error{Message: msg, Type: relaymodel.ErrorTypeInvalidRequest, Param: "model", Code: "model_not_found", RawError: errors.New(msg)}
+	c.JSON(http.StatusOK, gin.H{
+		"error": Error,
+	})
 }
 
+// GetUserAvailableModels lists the model identifiers the authenticated user can access.
 func GetUserAvailableModels(c *gin.Context) {
-	ctx := c.Request.Context()
+	ctx := gmw.Ctx(c)
 	id := c.GetInt(ctxkey.Id)
-	userGroup, err := model.CacheGetUserGroup(id)
+	userGroup, err := model.CacheGetUserGroup(ctx, id)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -196,7 +728,8 @@ func GetUserAvailableModels(c *gin.Context) {
 		})
 		return
 	}
-	models, err := model.CacheGetGroupModels(ctx, userGroup)
+
+	models, err := model.CacheGetGroupModelsV2(ctx, userGroup)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -204,10 +737,72 @@ func GetUserAvailableModels(c *gin.Context) {
 		})
 		return
 	}
+
+	var modelNames []string
+	modelsMap := map[string]bool{}
+	for _, model := range models {
+		modelsMap[model.Model] = true
+	}
+	for modelName := range modelsMap {
+		modelNames = append(modelNames, modelName)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    models,
+		"data":    modelNames,
 	})
-	return
+}
+
+// GetAvailableModelsByToken reports the models allowed for the current API token when explicitly restricted.
+func GetAvailableModelsByToken(c *gin.Context) {
+	// Get token information to determine status
+	tokenID := c.GetInt(ctxkey.TokenId)
+	userID := c.GetInt(ctxkey.Id)
+	token, err := model.GetTokenByIds(tokenID, userID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": err.Error(),
+			"data": gin.H{
+				"available": nil,
+				"enabled":   false,
+			},
+		})
+		return
+	}
+
+	// Determine if token is enabled
+	statusToken := token.Status == model.TokenStatusEnabled
+
+	// Check if the token has specific model restrictions
+	if availableModels, exists := c.Get(ctxkey.AvailableModels); exists {
+		// Token has model restrictions, use those models
+		modelsString := availableModels.(string)
+		if modelsString != "" {
+			modelNames := strings.Split(modelsString, ",")
+			// Trim whitespace from each model name
+			for i := range modelNames {
+				modelNames[i] = strings.TrimSpace(modelNames[i])
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"data": gin.H{
+					"available": modelNames,
+					"enabled":   statusToken,
+				},
+			})
+			return
+		}
+	}
+
+	// Token has no model restrictions, return error instead of fallback
+	c.JSON(http.StatusOK, gin.H{
+		"success": false,
+		"message": "the token has no available models",
+		"data": gin.H{
+			"available": nil,
+			"enabled":   statusToken,
+		},
+	})
 }

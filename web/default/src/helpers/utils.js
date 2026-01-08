@@ -80,26 +80,26 @@ export function showError(error) {
     if (error.name === 'AxiosError') {
       switch (error.response.status) {
         case 401:
-          // toast.error('错误：未登录或登录已过期，请重新登录！', showErrorOptions);
+          // toast.error('Error: Not logged in or login has expired, please log in again!', showErrorOptions);
           window.location.href = '/login?expired=true';
           break;
         case 429:
-          toast.error('错误：请求次数过多，请稍后再试！', showErrorOptions);
+          toast.error('Error: Too many requests, please try again later!', showErrorOptions);
           break;
         case 500:
-          toast.error('错误：服务器内部错误，请联系管理员！', showErrorOptions);
+          toast.error('Error: Server internal error, please contact the online customer service!', showErrorOptions);
           break;
         case 405:
-          toast.info('本站仅作演示之用，无服务端！');
+          toast.info('This site is for demonstration purposes only, no server!');
           break;
         default:
-          toast.error('错误：' + error.message, showErrorOptions);
+          toast.error('Error:' + error.message, showErrorOptions);
       }
       return;
     }
-    toast.error('错误：' + error.message, showErrorOptions);
+    toast.error('Error:' + error.message, showErrorOptions);
   } else {
-    toast.error('错误：' + error, showErrorOptions);
+    toast.error('Error:' + error, showErrorOptions);
   }
 }
 
@@ -136,7 +136,18 @@ export function removeTrailingSlash(url) {
 }
 
 export function timestamp2string(timestamp) {
+  // Handle invalid timestamps
+  if (!timestamp || timestamp <= 0 || isNaN(timestamp)) {
+    return 'N/A';
+  }
+
   let date = new Date(timestamp * 1000);
+
+  // Check if the date is valid
+  if (isNaN(date.getTime())) {
+    return 'Invalid Date';
+  }
+
   let year = date.getFullYear().toString();
   let month = (date.getMonth() + 1).toString();
   let day = date.getDate().toString();

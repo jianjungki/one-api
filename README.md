@@ -1,480 +1,1354 @@
-<p align="right">
-   <strong>中文</strong> | <a href="./README.en.md">English</a> | <a href="./README.ja.md">日本語</a>
-</p>
-
-
-<p align="center">
-  <a href="https://github.com/songquanpeng/one-api"><img src="https://raw.githubusercontent.com/songquanpeng/one-api/main/web/default/public/logo.png" width="150" height="150" alt="one-api logo"></a>
-</p>
-
-<div align="center">
-
 # One API
 
-_✨ 通过标准的 OpenAI API 格式访问所有的大模型，开箱即用 ✨_
+## Synopsis
 
-</div>
+Open‑source version of OpenRouter, managed through a unified gateway that handles all AI SaaS model calls. Core functions include:
 
-<p align="center">
-  <a href="https://raw.githubusercontent.com/songquanpeng/one-api/main/LICENSE">
-    <img src="https://img.shields.io/github/license/songquanpeng/one-api?color=brightgreen" alt="license">
-  </a>
-  <a href="https://github.com/songquanpeng/one-api/releases/latest">
-    <img src="https://img.shields.io/github/v/release/songquanpeng/one-api?color=brightgreen&include_prereleases" alt="release">
-  </a>
-  <a href="https://hub.docker.com/repository/docker/justsong/one-api">
-    <img src="https://img.shields.io/docker/pulls/justsong/one-api?color=brightgreen" alt="docker pull">
-  </a>
-  <a href="https://github.com/songquanpeng/one-api/releases/latest">
-    <img src="https://img.shields.io/github/downloads/songquanpeng/one-api/total?color=brightgreen&include_prereleases" alt="release">
-  </a>
-  <a href="https://goreportcard.com/report/github.com/songquanpeng/one-api">
-    <img src="https://goreportcard.com/badge/github.com/songquanpeng/one-api" alt="GoReportCard">
-  </a>
-</p>
+1. Aggregating chat, image, speech, TTS, embeddings, rerank and other capabilities.
+2. Aggregating multiple model providers such as OpenAI, Anthropic, Azure, Google Vertex, OpenRouter, DeepSeek, Replicate, AWS Bedrock, etc.
+3. Aggregating various upstream API request formats like Chat Completion, Response, Claude Messages.
+4. Supporting different request formats; users can issue requests via Chat Completion, Response, or Claude Messages, which are automatically and transparently converted to the native request format of the upstream model. Even if the client sends a mismatched request format to wrong api endpoint, it will still be correctly processed.
+5. Supporting multi‑tenant management, allowing each tenant to set distinct quotas and permissions.
+6. Supporting generation of sub‑API Keys; each tenant can create multiple sub‑API Keys, each of which can be bound to different models and quotas.
 
-<p align="center">
-  <a href="https://github.com/songquanpeng/one-api#部署">部署教程</a>
-  ·
-  <a href="https://github.com/songquanpeng/one-api#使用方法">使用方法</a>
-  ·
-  <a href="https://github.com/songquanpeng/one-api/issues">意见反馈</a>
-  ·
-  <a href="https://github.com/songquanpeng/one-api#截图展示">截图展示</a>
-  ·
-  <a href="https://openai.justsong.cn/">在线演示</a>
-  ·
-  <a href="https://github.com/songquanpeng/one-api#常见问题">常见问题</a>
-  ·
-  <a href="https://github.com/songquanpeng/one-api#相关项目">相关项目</a>
-  ·
-  <a href="https://iamazing.cn/page/reward">赞赏支持</a>
-</p>
+![](https://s3.laisky.com/uploads/2025/07/oneapi.drawio.png)
 
-> [!NOTE]
-> 本项目为开源项目，使用者必须在遵循 OpenAI 的[使用条款](https://openai.com/policies/terms-of-use)以及**法律法规**的情况下使用，不得用于非法用途。
->
-> 根据[《生成式人工智能服务管理暂行办法》](http://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm)的要求，请勿对中国地区公众提供一切未经备案的生成式人工智能服务。
+Also welcome to register and use my deployed one-api gateway, which supports various mainstream models. For usage instructions, please refer to <https://wiki.laisky.com/projects/gpt/pay/>.
 
-> [!NOTE]
-> 稳定版 / 预览版镜像地址：[justsong/one-api](https://hub.docker.com/repository/docker/justsong/one-api)
-> 或者 [ghcr.io/songquanpeng/one-api](https://github.com/songquanpeng/one-api/pkgs/container/one-api)
->
-> alpha 版镜像地址：[justsong/one-api-alpha](https://hub.docker.com/repository/docker/justsong/one-api-alpha)
-> 或者 [ghcr.io/songquanpeng/one-api-alpha](https://github.com/songquanpeng/one-api/pkgs/container/one-api-alpha)
+Try it at <https://oneapi.laisky.com>, login with `test` / `12345678`. 🚀
 
-> [!WARNING]
-> 使用 root 用户初次登录系统后，务必修改默认密码 `123456`！
+```plain
+=== One-API Compatibility Matrix 2025-12-12T04:37:09Z ===
 
-## 功能
-1. 支持多种大模型：
-   + [x] [OpenAI ChatGPT 系列模型](https://platform.openai.com/docs/guides/gpt/chat-completions-api)（支持 [Azure OpenAI API](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference)）
-   + [x] [Anthropic Claude 系列模型](https://anthropic.com) (支持 AWS Claude)
-   + [x] [Google PaLM2/Gemini 系列模型](https://developers.generativeai.google)
-   + [x] [Mistral 系列模型](https://mistral.ai/)
-   + [x] [字节跳动豆包大模型（火山引擎）](https://www.volcengine.com/experience/ark?utm_term=202502dsinvite&ac=DSASUQY5&rc=2QXCA1VI)
-   + [x] [百度文心一言系列模型](https://cloud.baidu.com/doc/WENXINWORKSHOP/index.html)
-   + [x] [阿里通义千问系列模型](https://help.aliyun.com/document_detail/2400395.html)
-   + [x] [讯飞星火认知大模型](https://www.xfyun.cn/doc/spark/Web.html)
-   + [x] [智谱 ChatGLM 系列模型](https://bigmodel.cn)
-   + [x] [360 智脑](https://ai.360.cn)
-   + [x] [腾讯混元大模型](https://cloud.tencent.com/document/product/1729)
-   + [x] [Moonshot AI](https://platform.moonshot.cn/)
-   + [x] [百川大模型](https://platform.baichuan-ai.com)
-   + [x] [MINIMAX](https://api.minimax.chat/)
-   + [x] [Groq](https://wow.groq.com/)
-   + [x] [Ollama](https://github.com/ollama/ollama)
-   + [x] [零一万物](https://platform.lingyiwanwu.com/)
-   + [x] [阶跃星辰](https://platform.stepfun.com/)
-   + [x] [Coze](https://www.coze.com/)
-   + [x] [Cohere](https://cohere.com/)
-   + [x] [DeepSeek](https://www.deepseek.com/)
-   + [x] [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/)
-   + [x] [DeepL](https://www.deepl.com/)
-   + [x] [together.ai](https://www.together.ai/)
-   + [x] [novita.ai](https://www.novita.ai/)
-   + [x] [硅基流动 SiliconCloud](https://cloud.siliconflow.cn/i/rKXmRobW)
-   + [x] [xAI](https://x.ai/)
-2. 支持配置镜像以及众多[第三方代理服务](https://iamazing.cn/page/openai-api-third-party-services)。
-3. 支持通过**负载均衡**的方式访问多个渠道。
-4. 支持 **stream 模式**，可以通过流式传输实现打字机效果。
-5. 支持**多机部署**，[详见此处](#多机部署)。
-6. 支持**令牌管理**，设置令牌的过期时间、额度、允许的 IP 范围以及允许的模型访问。
-7. 支持**兑换码管理**，支持批量生成和导出兑换码，可使用兑换码为账户进行充值。
-8. 支持**渠道管理**，批量创建渠道。
-9. 支持**用户分组**以及**渠道分组**，支持为不同分组设置不同的倍率。
-10. 支持渠道**设置模型列表**。
-11. 支持**查看额度明细**。
-12. 支持**用户邀请奖励**。
-13. 支持以美元为单位显示额度。
-14. 支持发布公告，设置充值链接，设置新用户初始额度。
-15. 支持模型映射，重定向用户的请求模型，如无必要请不要设置，设置之后会导致请求体被重新构造而非直接透传，会导致部分还未正式支持的字段无法传递成功。
-16. 支持失败自动重试。
-17. 支持绘图接口。
-18. 支持 [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/providers/openai/)，渠道设置的代理部分填写 `https://gateway.ai.cloudflare.com/v1/ACCOUNT_TAG/GATEWAY/openai` 即可。
-19. 支持丰富的**自定义**设置，
-    1. 支持自定义系统名称，logo 以及页脚。
-    2. 支持自定义首页和关于页面，可以选择使用 HTML & Markdown 代码进行自定义，或者使用一个单独的网页通过 iframe 嵌入。
-20. 支持通过系统访问令牌调用管理 API，进而**在无需二开的情况下扩展和自定义** One API 的功能，详情请参考此处 [API 文档](./docs/API.md)。
-21. 支持 Cloudflare Turnstile 用户校验。
-22. 支持用户管理，支持**多种用户登录注册方式**：
-    + 邮箱登录注册（支持注册邮箱白名单）以及通过邮箱进行密码重置。
-    + 支持[飞书授权登录](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/authen-v1/authorize/get)（[这里有 One API 的实现细节阐述供参考](https://iamazing.cn/page/feishu-oauth-login)）。
-    + 支持 [GitHub 授权登录](https://github.com/settings/applications/new)。
-    + 微信公众号授权（需要额外部署 [WeChat Server](https://github.com/songquanpeng/wechat-server)）。
-23. 支持主题切换，设置环境变量 `THEME` 即可，默认为 `default`，欢迎 PR 更多主题，具体参考[此处](./web/README.md)。
-24. 配合 [Message Pusher](https://github.com/songquanpeng/message-pusher) 可将报警信息推送到多种 App 上。
+Request Format                         gpt-4o-mini  gpt-5-mini   claude-haiku-4-5  gemini-2.5-flash  openai/gpt-oss-20b  deepseek-chat  grok-4-fast-non-reasoning  azure-gpt-5-nano
+Chat (stream=false)                    PASS 11.21s  PASS 13.10s  PASS 8.52s        PASS 4.64s        PASS 9.52s          PASS 7.08s     PASS 3.08s                 PASS 14.68s
+Chat (stream=true)                     PASS 13.23s  PASS 13.37s  PASS 2.31s        PASS 6.02s        PASS 4.56s          PASS 10.92s    PASS 9.72s                 PASS 15.30s
+Chat Tools (stream=false)              PASS 5.60s   PASS 12.94s  PASS 7.69s        PASS 7.11s        PASS 3.14s          PASS 8.71s     PASS 5.48s                 PASS* 35.02s
+Chat Tools (stream=true)               PASS 14.51s  PASS 18.90s  PASS 7.60s        PASS 4.36s        PASS 8.87s          PASS 7.56s     PASS 7.45s                 PASS 13.13s
+Chat Tools History (stream=false)      PASS 9.09s   PASS 14.28s  PASS 12.04s       PASS 7.45s        PASS 10.40s         PASS 9.52s     PASS 6.26s                 PASS 13.61s
+Chat Tools History (stream=true)       PASS 14.80s  PASS 25.49s  PASS 3.08s        PASS 11.24s       PASS 5.22s          PASS 4.97s     PASS 5.14s                 PASS 15.56s
+Chat Structured (stream=false)         PASS 10.51s  PASS 15.71s  PASS 12.66s       PASS 13.68s       PASS 8.24s          PASS 6.95s     PASS 13.42s                PASS 13.80s
+Chat Structured (stream=true)          PASS 11.26s  PASS 14.50s  PASS 6.07s        PASS 4.84s        PASS 6.97s          PASS 6.86s     PASS 4.51s                 PASS 14.04s
+Response (stream=false)                PASS 14.65s  PASS 15.31s  PASS 10.51s       PASS 3.03s        PASS 3.98s          PASS 12.83s    PASS 11.29s                PASS 15.70s
+Response (stream=true)                 PASS 8.91s   PASS 17.54s  PASS 6.51s        PASS 5.81s        PASS 5.26s          PASS 7.56s     PASS 9.51s                 PASS 15.66s
+Response Vision (stream=false)         PASS 12.32s  PASS 14.49s  PASS 14.12s       PASS 8.82s        SKIP                SKIP           PASS 8.74s                 PASS 16.59s
+Response Vision (stream=true)          PASS 11.04s  PASS 9.50s   PASS 10.75s       PASS 13.60s       SKIP                SKIP           PASS 9.05s                 PASS 11.51s
+Response Tools (stream=false)          PASS 11.02s  PASS 11.71s  PASS 7.68s        PASS 10.55s       PASS 4.04s          PASS 10.30s    PASS 10.15s                PASS 12.93s
+Response Tools (stream=true)           PASS 8.64s   PASS 14.40s  PASS 10.73s       PASS 13.20s       PASS 6.81s          PASS 7.62s     PASS 13.42s                PASS 12.03s
+Response Tools History (stream=false)  PASS 8.04s   PASS 14.45s  PASS 9.63s        PASS 5.54s        PASS 5.88s          PASS 9.30s     PASS 5.22s                 PASS 11.11s
+Response Tools History (stream=true)   PASS 9.89s   PASS 12.22s  PASS 6.58s        PASS 5.18s        PASS 7.40s          PASS 5.84s     PASS 4.50s                 PASS 16.86s
+Response Structured (stream=false)     PASS 14.35s  PASS 15.40s  PASS 13.74s       PASS 12.78s       PASS 7.59s          PASS 5.99s     PASS 12.10s                PASS 13.18s
+Response Structured (stream=true)      PASS 15.04s  PASS 12.68s  PASS 12.52s       PASS 7.83s        PASS 7.85s          PASS 3.81s     PASS 8.35s                 PASS 11.01s
+Claude (stream=false)                  PASS 4.78s   PASS 11.79s  PASS 12.18s       PASS 10.58s       PASS 8.75s          PASS 12.46s    PASS 9.66s                 PASS 14.93s
+Claude (stream=true)                   PASS 4.46s   PASS 9.82s   PASS 6.43s        PASS 14.37s       PASS 9.22s          PASS 12.17s    PASS 3.13s                 PASS 20.63s
+Claude Tools (stream=false)            PASS 9.20s   PASS 11.08s  PASS 11.79s       PASS 3.55s        PASS 7.39s          PASS 6.32s     PASS 12.71s                PASS 14.85s
+Claude Tools (stream=true)             PASS 3.01s   PASS 6.56s   PASS 14.15s       PASS 8.11s        PASS 9.11s          PASS 8.37s     PASS 4.16s                 PASS 12.80s
+Claude Tools History (stream=false)    PASS 9.67s   PASS 15.07s  PASS 7.45s        PASS 6.70s        PASS 8.47s          PASS 9.25s     PASS 13.92s                PASS 15.36s
+Claude Tools History (stream=true)     PASS 11.15s  PASS 19.37s  PASS 13.52s       PASS 8.90s        PASS 7.20s          PASS 8.89s     PASS 5.81s                 PASS 9.87s
+Claude Structured (stream=false)       PASS 5.39s   SKIP         PASS 7.89s        PASS 11.51s       PASS 13.30s         PASS 8.31s     PASS 6.16s                 SKIP
+Claude Structured (stream=true)        PASS 6.43s   SKIP         PASS 11.05s       PASS 9.62s        PASS 3.05s          PASS 4.64s     PASS 4.69s                 SKIP
 
-## 部署
-### 基于 Docker 进行部署
-```shell
-# 使用 SQLite 的部署命令：
-docker run --name one-api -d --restart always -p 3000:3000 -e TZ=Asia/Shanghai -v /home/ubuntu/data/one-api:/data justsong/one-api
-# 使用 MySQL 的部署命令，在上面的基础上添加 `-e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi"`，请自行修改数据库连接参数，不清楚如何修改请参见下面环境变量一节。
-# 例如：
-docker run --name one-api -d --restart always -p 3000:3000 -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" -e TZ=Asia/Shanghai -v /home/ubuntu/data/one-api:/data justsong/one-api
+Totals  | Requests: 208 | Passed: 200 | Failed: 0 | Skipped: 8
+
+Warnings (passed with caveats):
+- azure-gpt-5-nano - Chat Tools (stream=false) -> tool was not invoked
+
+Skipped (unsupported combinations):
+- azure-gpt-5-nano - Claude Structured (stream=false) -> Azure GPT-5 nano does not return structured JSON for Claude messages (empty content)
+- azure-gpt-5-nano - Claude Structured (stream=true) -> Azure GPT-5 nano does not return structured JSON for Claude messages (empty content)
+- deepseek-chat - Response Vision (stream=false) -> vision input unsupported by model deepseek-chat
+- deepseek-chat - Response Vision (stream=true) -> vision input unsupported by model deepseek-chat
+- gpt-5-mini - Claude Structured (stream=false) -> GPT-5 mini returns empty content for Claude structured requests
+- gpt-5-mini - Claude Structured (stream=true) -> GPT-5 mini streams only usage deltas, never emitting structured JSON blocks
+- openai/gpt-oss-20b - Response Vision (stream=false) -> vision input unsupported by model openai/gpt-oss-20b
+- openai/gpt-oss-20b - Response Vision (stream=true) -> vision input unsupported by model openai/gpt-oss-20b
+
+2025-12-12T04:37:09Z    INFO    oneapi-test     test/main.go:58 command completed       {"command": "run"}
+
 ```
 
-其中，`-p 3000:3000` 中的第一个 `3000` 是宿主机的端口，可以根据需要进行修改。
+### Why this fork exists
 
-数据和日志将会保存在宿主机的 `/home/ubuntu/data/one-api` 目录，请确保该目录存在且具有写入权限，或者更改为合适的目录。
+The original author stopped maintaining the project, leaving critical PRs and new features unaddressed. As a long‑time contributor, I’ve forked the repository and rebuilt the core to keep the ecosystem alive and evolving.
 
-如果启动失败，请添加 `--privileged=true`，具体参考 https://github.com/songquanpeng/one-api/issues/482 。
+- [One API](#one-api)
+  - [Synopsis](#synopsis)
+    - [Why this fork exists](#why-this-fork-exists)
+  - [Tutorial](#tutorial)
+    - [Docker Compose Deployment](#docker-compose-deployment)
+    - [Kubernetes Deployment](#kubernetes-deployment)
+  - [Contributors](#contributors)
+  - [New Features](#new-features)
+    - [Universal Features](#universal-features)
+      - [I18n Support](#i18n-support)
+      - [Unified Billing System](#unified-billing-system)
+      - [Support Open Telemetry](#support-open-telemetry)
+      - [Support channel's built-in tooling configuration](#support-channels-built-in-tooling-configuration)
+      - [Support update user's remained quota](#support-update-users-remained-quota)
+      - [Get request's cost](#get-requests-cost)
+      - [Support Tracing info in logs](#support-tracing-info-in-logs)
+      - [Support Cached Input](#support-cached-input)
+        - [Support Anthropic Prompt caching](#support-anthropic-prompt-caching)
+      - [Automatically Enable Thinking and Customize Reasoning Format via URL Parameters](#automatically-enable-thinking-and-customize-reasoning-format-via-url-parameters)
+        - [Reasoning Format - reasoning-content](#reasoning-format---reasoning-content)
+        - [Reasoning Format - reasoning](#reasoning-format---reasoning)
+        - [Reasoning Format - thinking](#reasoning-format---thinking)
+    - [OpenAI Features](#openai-features)
+      - [Support whisper](#support-whisper)
+      - [Support openai images edits](#support-openai-images-edits)
+      - [Support OpenAI o1/o1-mini/o1-preview](#support-openai-o1o1-minio1-preview)
+      - [Support gpt-4o-audio](#support-gpt-4o-audio)
+      - [Support OpenAI web search models](#support-openai-web-search-models)
+      - [Support gpt-image family for image generation \& edits](#support-gpt-image-family-for-image-generation--edits)
+      - [Support o3-mini \& o3 \& o4-mini \& gpt-4.1 \& o3-pro \& reasoning content](#support-o3-mini--o3--o4-mini--gpt-41--o3-pro--reasoning-content)
+      - [Support OpenAI Response API](#support-openai-response-api)
+      - [Support gpt-5 family](#support-gpt-5-family)
+      - [Support o3-deep-research \& o4-mini-deep-research](#support-o3-deep-research--o4-mini-deep-research)
+      - [Support Codex Cli](#support-codex-cli)
+      - [Support Sora](#support-sora)
+    - [Anthropic (Claude) Features](#anthropic-claude-features)
+      - [(Merged) Support aws claude](#merged-support-aws-claude)
+      - [Support claude-3-7-sonnet \& thinking](#support-claude-3-7-sonnet--thinking)
+        - [Stream](#stream)
+        - [Non-Stream](#non-stream)
+      - [Support /v1/messages Claude Messages API](#support-v1messages-claude-messages-api)
+        - [Support Claude Code](#support-claude-code)
+    - [Support Claude 4.x Models](#support-claude-4x-models)
+    - [Google (Gemini \& Vertex) Features](#google-gemini--vertex-features)
+      - [Support gemini-2.0-flash-exp](#support-gemini-20-flash-exp)
+      - [Support gemini-2.0-flash](#support-gemini-20-flash)
+      - [Support gemini-2.0-flash-thinking-exp-01-21](#support-gemini-20-flash-thinking-exp-01-21)
+      - [Support Vertex Imagen3](#support-vertex-imagen3)
+      - [Support gemini multimodal output #2197](#support-gemini-multimodal-output-2197)
+      - [Support gemini-2.5-pro](#support-gemini-25-pro)
+      - [Support GCP Vertex gloabl region and gemini-2.5-pro-preview-06-05](#support-gcp-vertex-gloabl-region-and-gemini-25-pro-preview-06-05)
+      - [Support gemini-2.5-flash-image-preview \& imagen-4 series](#support-gemini-25-flash-image-preview--imagen-4-series)
+      - [Support gemini-3 family](#support-gemini-3-family)
+    - [OpenCode Support](#opencode-support)
+    - [AWS Features](#aws-features)
+      - [Support AWS cross-region inferences](#support-aws-cross-region-inferences)
+      - [Support AWS BedRock Inference Profile](#support-aws-bedrock-inference-profile)
+    - [Replicate Features](#replicate-features)
+      - [Support replicate flux \& remix](#support-replicate-flux--remix)
+      - [Support replicate chat models](#support-replicate-chat-models)
+    - [DeepSeek Features](#deepseek-features)
+      - [Support deepseek-reasoner](#support-deepseek-reasoner)
+    - [OpenRouter Features](#openrouter-features)
+      - [Support OpenRouter's reasoning content](#support-openrouters-reasoning-content)
+    - [Cohere](#cohere)
+      - [Support Cohere Command R \& Rerank](#support-cohere-command-r--rerank)
+    - [Coze Features](#coze-features)
+      - [Support coze oauth authentication](#support-coze-oauth-authentication)
+    - [Moonshot Features](#moonshot-features)
+      - [Support kimi-k2 Family](#support-kimi-k2-family)
+    - [GLM Features](#glm-features)
+      - [Support GLM-4 Family](#support-glm-4-family)
+    - [XAI / Grok Features](#xai--grok-features)
+      - [Support XAI/Grok Text \& Image Models](#support-xaigrok-text--image-models)
+    - [Black Forest Labs Features](#black-forest-labs-features)
+      - [Support black-forest-labs/flux-kontext-pro](#support-black-forest-labsflux-kontext-pro)
+  - [Bug Fixes \& Enterprise-Grade Improvements (Including Security Enhancements)](#bug-fixes--enterprise-grade-improvements-including-security-enhancements)
 
-如果上面的镜像无法拉取，可以尝试使用 GitHub 的 Docker 镜像，将上面的 `justsong/one-api` 替换为 `ghcr.io/songquanpeng/one-api` 即可。
+## Tutorial
 
-如果你的并发量较大，**务必**设置 `SQL_DSN`，详见下面[环境变量](#环境变量)一节。
+### Docker Compose Deployment
 
-更新命令：`docker run --rm -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower -cR`
+Docker images available on Docker Hub:
 
-Nginx 的参考配置：
+- `ppcelery/one-api:latest`
+- `ppcelery/one-api:arm64-latest`
+
+The initial default account and password are `root` / `123456`. Listening port can be configured via the `PORT` environment variable, default is `3000`.
+
+Run one-api using docker-compose:
+
+> All environment variables can be set via the `environment` section in the `docker-compose.yml` file, please refer to [./common/config/config.go](./common/config/config.go) for all available configuration options.
+
+```yaml
+oneapi:
+  image: ppcelery/one-api:latest
+  restart: unless-stopped
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+  volumes:
+    - /var/lib/oneapi:/data
+  ports:
+    - 3000:3000
 ```
-server{
-   server_name openai.justsong.cn;  # 请根据实际情况修改你的域名
 
-   location / {
-          client_max_body_size  64m;
-          proxy_http_version 1.1;
-          proxy_pass http://localhost:3000;  # 请根据实际情况修改你的端口
-          proxy_set_header Host $host;
-          proxy_set_header X-Forwarded-For $remote_addr;
-          proxy_cache_bypass $http_upgrade;
-          proxy_set_header Accept-Encoding gzip;
-          proxy_read_timeout 300s;  # GPT-4 需要较长的超时时间，请自行调整
-   }
+> [!TIP]
+>
+> For production environments, consider using proper secret management solutions instead of hardcoding sensitive values in environment variables.
+
+### Kubernetes Deployment
+
+The Kubernetes deployment guide has been moved into a dedicated document:
+
+- [docs/manuals/k8s.md](docs/manuals/k8s.md)
+
+## Contributors
+
+<a href="https://github.com/Laisky/one-api/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Laisky/one-api" />
+</a>
+
+## New Features
+
+### Universal Features
+
+#### I18n Support
+
+Support internationalization (i18n) in the web frontend, including English, Chinese, French, Spanish, and Japanese.
+
+#### Unified Billing System
+
+All channels share a four-layer billing pipeline (channel overrides → adapter defaults → global fallback → safe default) with support for tiered token pricing, cached prompt buckets, and per-second/per-image media meters. Administrators can fetch defaults, override specific models, and audit every call via `X-Oneapi-Request-Id`; see [docs/arch/billing.md](./docs/arch/billing.md) for internals and [docs/manuals/billing.md](./docs/manuals/billing.md) for the operational playbook.
+
+#### Support Open Telemetry
+
+```sh
+# set environment variables
+OTEL_ENABLED="true"
+OTEL_EXPORTER_OTLP_ENDPOINT="http://otel-collector:4317"
+OTEL_EXPORTER_OTLP_INSECURE="true"
+OTEL_SERVICE_NAME="one-api"
+OTEL_ENVIRONMENT="debug"
+```
+
+#### Support channel's built-in tooling configuration
+
+Configure the price and whitelist for a channel’s built‑in tools.
+
+![tooling-config](https://s3.laisky.com/uploads/2025/11/oneapi-channel-tools.png)
+
+#### Support update user's remained quota
+
+You can update the used quota using the API key of any token, allowing other consumption to be aggregated into the one-api for centralized management.
+
+```sh
+curl -X POST https://oneapi.laisky.com/api/token/consume \
+  -H "Authorization: Bearer <TOKEN_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "add_reason": "async-transcode",
+    "add_used_quota": 150
+  }'
+```
+
+[> Read More](./docs/manuals/external_billing.md)
+
+#### Get request's cost
+
+Each chat completion request will include a `X-Oneapi-Request-Id` in the returned headers. You can use this request id to request `GET /api/cost/request/:request_id` to get the cost of this request.
+
+The returned structure is:
+
+```go
+type UserRequestCost struct {
+  Id          int     `json:"id"`
+  CreatedTime int64   `json:"created_time" gorm:"bigint"`
+  UserID      int     `json:"user_id"`
+  RequestID   string  `json:"request_id"`
+  Quota       int64   `json:"quota"`
+  CostUSD     float64 `json:"cost_usd" gorm:"-"`
 }
 ```
 
-之后使用 Let's Encrypt 的 certbot 配置 HTTPS：
-```bash
-# Ubuntu 安装 certbot：
-sudo snap install --classic certbot
-sudo ln -s /snap/bin/certbot /usr/bin/certbot
-# 生成证书 & 修改 Nginx 配置
-sudo certbot --nginx
-# 根据指示进行操作
-# 重启 Nginx
-sudo service nginx restart
+#### Support Tracing info in logs
+
+![](https://s3.laisky.com/uploads/2025/08/tracing.png)
+
+#### Support Cached Input
+
+Now supports cached input, which can significantly reduce the cost.
+
+![](https://s3.laisky.com/uploads/2025/08/cached_input.png)
+
+##### Support Anthropic Prompt caching
+
+- <https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching>
+
+#### Automatically Enable Thinking and Customize Reasoning Format via URL Parameters
+
+Supports two URL parameters: `thinking` and `reasoning_format`.
+
+- `thinking`: Whether to enable thinking mode, disabled by default.
+- `reasoning_format`: Specifies the format of the returned reasoning.
+  - `reasoning_content`: DeepSeek official API format, returned in the `reasoning_content` field.
+  - `reasoning`: OpenRouter format, returned in the `reasoning` field.
+  - `thinking`: Claude format, returned in the `thinking` field.
+
+##### Reasoning Format - reasoning-content
+
+```sh
+curl --location 'https://oneapi.laisky.com/v1/chat/completions?thinking=true&reasoning_format=reasoning_content' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: sk-xxxxxxx' \
+  --data '{
+    "model": "gpt-5-mini",
+    "max_tokens": 1024,
+    "messages": [
+      {
+        "role": "user",
+        "content": "1+1=?"
+      }
+    ]
+  }'
 ```
 
-初始账号用户名为 `root`，密码为 `123456`。
+Response:
 
-### 通过宝塔面板进行一键部署
-1. 安装宝塔面板9.2.0及以上版本，前往 [宝塔面板](https://www.bt.cn/new/download.html?r=dk_oneapi) 官网，选择正式版的脚本下载安装；
-2. 安装后登录宝塔面板，在左侧菜单栏中点击 `Docker`，首次进入会提示安装 `Docker` 服务，点击立即安装，按提示完成安装；
-3. 安装完成后在应用商店中搜索 `One-API`，点击安装，配置域名等基本信息即可完成安装；
-
-### 基于 Docker Compose 进行部署
-
-> 仅启动方式不同，参数设置不变，请参考基于 Docker 部署部分
-
-```shell
-# 目前支持 MySQL 启动，数据存储在 ./data/mysql 文件夹内
-docker-compose up -d
-
-# 查看部署状态
-docker-compose ps
+```json
+{
+  "id": "resp_01282fbc2c1cd0a90069068d5ae43c819e93f5ca9ebacf4aaa",
+  "model": "gpt-5-mini",
+  "object": "chat.completion",
+  "created": 1762037082,
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "2",
+        "reasoning_content": "**Calculating addition succinctly**\n\nI need to respond clearly. The user might be asking playfully, so I should keep it concise. The simplest answer is 1 + 1 = 2. It could be fun to mention that in binary, 1 + 1 equals 10, but that's not really necessary since the typical base is decimal. I'll stick with the straightforward response: \"2.\" Maybe I can add a brief note explaining it, like \"Adding one and one gives two,\" but I’ll keep it minimal.",
+        "reasoning": "**Calculating addition succinctly**\n\nI need to respond clearly. The user might be asking playfully, so I should keep it concise. The simplest answer is 1 + 1 = 2. It could be fun to mention that in binary, 1 + 1 equals 10, but that's not really necessary since the typical base is decimal. I'll stick with the straightforward response: \"2.\" Maybe I can add a brief note explaining it, like \"Adding one and one gives two,\" but I’ll keep it minimal."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 199,
+    "total_tokens": 209,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0,
+      "text_tokens": 0,
+      "image_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 192,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0,
+      "text_tokens": 0,
+      "cached_tokens": 0
+    }
+  }
+}
 ```
 
-### 手动部署
-1. 从 [GitHub Releases](https://github.com/songquanpeng/one-api/releases/latest) 下载可执行文件或者从源码编译：
-   ```shell
-   git clone https://github.com/songquanpeng/one-api.git
+##### Reasoning Format - reasoning
 
-   # 构建前端
-   cd one-api/web/default
-   npm install
-   npm run build
-
-   # 构建后端
-   cd ../..
-   go mod download
-   go build -ldflags "-s -w" -o one-api
-   ````
-2. 运行：
-   ```shell
-   chmod u+x one-api
-   ./one-api --port 3000 --log-dir ./logs
-   ```
-3. 访问 [http://localhost:3000/](http://localhost:3000/) 并登录。初始账号用户名为 `root`，密码为 `123456`。
-
-更加详细的部署教程[参见此处](https://iamazing.cn/page/how-to-deploy-a-website)。
-
-### 多机部署
-1. 所有服务器 `SESSION_SECRET` 设置一样的值。
-2. 必须设置 `SQL_DSN`，使用 MySQL 数据库而非 SQLite，所有服务器连接同一个数据库。
-3. 所有从服务器必须设置 `NODE_TYPE` 为 `slave`，不设置则默认为主服务器。
-4. 设置 `SYNC_FREQUENCY` 后服务器将定期从数据库同步配置，在使用远程数据库的情况下，推荐设置该项并启用 Redis，无论主从。
-5. 从服务器可以选择设置 `FRONTEND_BASE_URL`，以重定向页面请求到主服务器。
-6. 从服务器上**分别**装好 Redis，设置好 `REDIS_CONN_STRING`，这样可以做到在缓存未过期的情况下数据库零访问，可以减少延迟（Redis 集群或者哨兵模式的支持请参考环境变量说明）。
-7. 如果主服务器访问数据库延迟也比较高，则也需要启用 Redis，并设置 `SYNC_FREQUENCY`，以定期从数据库同步配置。
-
-环境变量的具体使用方法详见[此处](#环境变量)。
-
-### 宝塔部署教程
-
-详见 [#175](https://github.com/songquanpeng/one-api/issues/175)。
-
-如果部署后访问出现空白页面，详见 [#97](https://github.com/songquanpeng/one-api/issues/97)。
-
-### 部署第三方服务配合 One API 使用
-> 欢迎 PR 添加更多示例。
-
-#### ChatGPT Next Web
-项目主页：https://github.com/Yidadaa/ChatGPT-Next-Web
-
-```bash
-docker run --name chat-next-web -d -p 3001:3000 yidadaa/chatgpt-next-web
+```sh
+curl --location 'https://oneapi.laisky.com/v1/chat/completions?thinking=true&reasoning_format=reasoning' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: sk-xxxxxxx' \
+  --data '{
+    "model": "gpt-5-mini",
+    "max_tokens": 1024,
+    "messages": [
+      {
+        "role": "user",
+        "content": "1+1=?"
+      }
+    ]
+  }'
 ```
 
-注意修改端口号，之后在页面上设置接口地址（例如：https://openai.justsong.cn/ ）和 API Key 即可。
+Response:
 
-#### ChatGPT Web
-项目主页：https://github.com/Chanzhaoyu/chatgpt-web
-
-```bash
-docker run --name chatgpt-web -d -p 3002:3002 -e OPENAI_API_BASE_URL=https://openai.justsong.cn -e OPENAI_API_KEY=sk-xxx chenzhaoyu94/chatgpt-web
+```json
+{
+  "id": "resp_0e6222cdcfeabbbf0069068da588b88194964340c1e33fbabb",
+  "model": "gpt-5-mini",
+  "object": "chat.completion",
+  "created": 1762037157,
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "2",
+        "reasoning": "**Calculating a simple equation**\n\nThe user asked what 1 + 1 equals, which is a straightforward question. I can just respond with \"2.\" Although I could add a simple explanation that 1 plus 1 equals 2, I should keep it concise. So, I’ll stick with the answer \"2\" and perhaps mention \"1 + 1 = 2\" for clarity. It's clear, and there are no concerns here, so I'll give the final response of \"2.\""
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 71,
+    "total_tokens": 81,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0,
+      "text_tokens": 0,
+      "image_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 64,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0,
+      "text_tokens": 0,
+      "cached_tokens": 0
+    }
+  }
+}
 ```
 
-注意修改端口号、`OPENAI_API_BASE_URL` 和 `OPENAI_API_KEY`。
+##### Reasoning Format - thinking
 
-#### QChatGPT - QQ机器人
-项目主页：https://github.com/RockChinQ/QChatGPT
-
-根据[文档](https://qchatgpt.rockchin.top)完成部署后，在 `data/provider.json`设置`requester.openai-chat-completions.base-url`为 One API 实例地址，并填写 API Key 到 `keys.openai` 组中，设置 `model` 为要使用的模型名称。
-
-运行期间可以通过`!model`命令查看、切换可用模型。
-
-### 部署到第三方平台
-<details>
-<summary><strong>部署到 Sealos </strong></summary>
-<div>
-
-> Sealos 的服务器在国外，不需要额外处理网络问题，支持高并发 & 动态伸缩。
-
-点击以下按钮一键部署（部署后访问出现 404 请等待 3~5 分钟）：
-
-[![Deploy-on-Sealos.svg](https://raw.githubusercontent.com/labring-actions/templates/main/Deploy-on-Sealos.svg)](https://cloud.sealos.io/?openapp=system-fastdeploy?templateName=one-api)
-
-</div>
-</details>
-
-<details>
-<summary><strong>部署到 Zeabur</strong></summary>
-<div>
-
-> Zeabur 的服务器在国外，自动解决了网络的问题，同时免费的额度也足够个人使用
-
-[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/7Q0KO3)
-
-1. 首先 fork 一份代码。
-2. 进入 [Zeabur](https://zeabur.com?referralCode=songquanpeng)，登录，进入控制台。
-3. 新建一个 Project，在 Service -> Add Service 选择 Marketplace，选择 MySQL，并记下连接参数（用户名、密码、地址、端口）。
-4. 复制链接参数，运行 ```create database `one-api` ``` 创建数据库。
-5. 然后在 Service -> Add Service，选择 Git（第一次使用需要先授权），选择你 fork 的仓库。
-6. Deploy 会自动开始，先取消。进入下方 Variable，添加一个 `PORT`，值为 `3000`，再添加一个 `SQL_DSN`，值为 `<username>:<password>@tcp(<addr>:<port>)/one-api` ，然后保存。 注意如果不填写 `SQL_DSN`，数据将无法持久化，重新部署后数据会丢失。
-7. 选择 Redeploy。
-8. 进入下方 Domains，选择一个合适的域名前缀，如 "my-one-api"，最终域名为 "my-one-api.zeabur.app"，也可以 CNAME 自己的域名。
-9. 等待部署完成，点击生成的域名进入 One API。
-
-</div>
-</details>
-
-<details>
-<summary><strong>部署到 Render</strong></summary>
-<div>
-
-> Render 提供免费额度，绑卡后可以进一步提升额度
-
-Render 可以直接部署 docker 镜像，不需要 fork 仓库：https://dashboard.render.com
-
-</div>
-</details>
-
-## 配置
-系统本身开箱即用。
-
-你可以通过设置环境变量或者命令行参数进行配置。
-
-等到系统启动后，使用 `root` 用户登录系统并做进一步的配置。
-
-**Note**：如果你不知道某个配置项的含义，可以临时删掉值以看到进一步的提示文字。
-
-## 使用方法
-在`渠道`页面中添加你的 API Key，之后在`令牌`页面中新增访问令牌。
-
-之后就可以使用你的令牌访问 One API 了，使用方式与 [OpenAI API](https://platform.openai.com/docs/api-reference/introduction) 一致。
-
-你需要在各种用到 OpenAI API 的地方设置 API Base 为你的 One API 的部署地址，例如：`https://openai.justsong.cn`，API Key 则为你在 One API 中生成的令牌。
-
-注意，具体的 API Base 的格式取决于你所使用的客户端。
-
-例如对于 OpenAI 的官方库：
-```bash
-OPENAI_API_KEY="sk-xxxxxx"
-OPENAI_API_BASE="https://<HOST>:<PORT>/v1"
+```sh
+curl --location 'https://oneapi.laisky.com/v1/chat/completions?thinking=true&reasoning_format=thinking' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: sk-xxxxxxx' \
+  --data '{
+    "model": "gpt-5-mini",
+    "max_tokens": 1024,
+    "messages": [
+      {
+      "role": "user",
+      "content": "1+1=?"
+    }
+    ]
+  }'
 ```
 
-```mermaid
-graph LR
-    A(用户)
-    A --->|使用 One API 分发的 key 进行请求| B(One API)
-    B -->|中继请求| C(OpenAI)
-    B -->|中继请求| D(Azure)
-    B -->|中继请求| E(其他 OpenAI API 格式下游渠道)
-    B -->|中继并修改请求体和返回体| F(非 OpenAI API 格式下游渠道)
+Response:
+
+```json
+{
+  "id": "resp_099bd53deedec1a80069068dc160d88191a1d3ff4eb82c37bb",
+  "model": "gpt-5-mini",
+  "object": "chat.completion",
+  "created": 1762037185,
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "2",
+        "thinking": "**Calculating simple arithmetic**\n\nThe user asked a really straightforward question: \"1+1=?\". I should definitely keep it concise, so the answer is simply 2. I could also mention that 1+1 equals 2 in terms of adding integers. But really, just saying \"2\" should suffice. If they're curious for more detail, I can provide a brief explanation. Still, keeping it minimal, I'll just go with \"2\". That's all they need!"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 71,
+    "total_tokens": 81,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0,
+      "text_tokens": 0,
+      "image_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 64,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0,
+      "text_tokens": 0,
+      "cached_tokens": 0
+    }
+  }
+}
 ```
 
-可以通过在令牌后面添加渠道 ID 的方式指定使用哪一个渠道处理本次请求，例如：`Authorization: Bearer ONE_API_KEY-CHANNEL_ID`。
-注意，需要是管理员用户创建的令牌才能指定渠道 ID。
+### OpenAI Features
 
-不加的话将会使用负载均衡的方式使用多个渠道。
+#### Support whisper
 
-### 环境变量
-> One API 支持从 `.env` 文件中读取环境变量，请参照 `.env.example` 文件，使用时请将其重命名为 `.env`。
-1. `REDIS_CONN_STRING`：设置之后将使用 Redis 作为缓存使用。
-   + 例子：`REDIS_CONN_STRING=redis://default:redispw@localhost:49153`
-   + 如果数据库访问延迟很低，没有必要启用 Redis，启用后反而会出现数据滞后的问题。
-   + 如果需要使用哨兵或者集群模式：
-     + 则需要把该环境变量设置为节点列表，例如：`localhost:49153,localhost:49154,localhost:49155`。
-     + 除此之外还需要设置以下环境变量：
-       + `REDIS_PASSWORD`：Redis 集群或者哨兵模式下的密码设置。
-       + `REDIS_MASTER_NAME`：Redis 哨兵模式下主节点的名称。
-2. `SESSION_SECRET`：设置之后将使用固定的会话密钥，这样系统重新启动后已登录用户的 cookie 将依旧有效。
-   + 例子：`SESSION_SECRET=random_string`
-3. `SQL_DSN`：设置之后将使用指定数据库而非 SQLite，请使用 MySQL 或 PostgreSQL。
-   + 例子：
-     + MySQL：`SQL_DSN=root:123456@tcp(localhost:3306)/oneapi`
-     + PostgreSQL：`SQL_DSN=postgres://postgres:123456@localhost:5432/oneapi`（适配中，欢迎反馈）
-   + 注意需要提前建立数据库 `oneapi`，无需手动建表，程序将自动建表。
-   + 如果使用本地数据库：部署命令可添加 `--network="host"` 以使得容器内的程序可以访问到宿主机上的 MySQL。
-   + 如果使用云数据库：如果云服务器需要验证身份，需要在连接参数中添加 `?tls=skip-verify`。
-   + 请根据你的数据库配置修改下列参数（或者保持默认值）：
-     + `SQL_MAX_IDLE_CONNS`：最大空闲连接数，默认为 `100`。
-     + `SQL_MAX_OPEN_CONNS`：最大打开连接数，默认为 `1000`。
-       + 如果报错 `Error 1040: Too many connections`，请适当减小该值。
-     + `SQL_CONN_MAX_LIFETIME`：连接的最大生命周期，默认为 `60`，单位分钟。
-4. `LOG_SQL_DSN`：设置之后将为 `logs` 表使用独立的数据库，请使用 MySQL 或 PostgreSQL。
-5. `FRONTEND_BASE_URL`：设置之后将重定向页面请求到指定的地址，仅限从服务器设置。
-   + 例子：`FRONTEND_BASE_URL=https://openai.justsong.cn`
-6. `MEMORY_CACHE_ENABLED`：启用内存缓存，会导致用户额度的更新存在一定的延迟，可选值为 `true` 和 `false`，未设置则默认为 `false`。
-   + 例子：`MEMORY_CACHE_ENABLED=true`
-7. `SYNC_FREQUENCY`：在启用缓存的情况下与数据库同步配置的频率，单位为秒，默认为 `600` 秒。
-   + 例子：`SYNC_FREQUENCY=60`
-8. `NODE_TYPE`：设置之后将指定节点类型，可选值为 `master` 和 `slave`，未设置则默认为 `master`。
-   + 例子：`NODE_TYPE=slave`
-9. `CHANNEL_UPDATE_FREQUENCY`：设置之后将定期更新渠道余额，单位为分钟，未设置则不进行更新。
-   + 例子：`CHANNEL_UPDATE_FREQUENCY=1440`
-10. `CHANNEL_TEST_FREQUENCY`：设置之后将定期检查渠道，单位为分钟，未设置则不进行检查。 
-   +例子：`CHANNEL_TEST_FREQUENCY=1440`
-11. `POLLING_INTERVAL`：批量更新渠道余额以及测试可用性时的请求间隔，单位为秒，默认无间隔。
-    + 例子：`POLLING_INTERVAL=5`
-12. `BATCH_UPDATE_ENABLED`：启用数据库批量更新聚合，会导致用户额度的更新存在一定的延迟可选值为 `true` 和 `false`，未设置则默认为 `false`。
-    + 例子：`BATCH_UPDATE_ENABLED=true`
-    + 如果你遇到了数据库连接数过多的问题，可以尝试启用该选项。
-13. `BATCH_UPDATE_INTERVAL=5`：批量更新聚合的时间间隔，单位为秒，默认为 `5`。
-    + 例子：`BATCH_UPDATE_INTERVAL=5`
-14. 请求频率限制：
-    + `GLOBAL_API_RATE_LIMIT`：全局 API 速率限制（除中继请求外），单 ip 三分钟内的最大请求数，默认为 `180`。
-    + `GLOBAL_WEB_RATE_LIMIT`：全局 Web 速率限制，单 ip 三分钟内的最大请求数，默认为 `60`。
-15. 编码器缓存设置：
-    + `TIKTOKEN_CACHE_DIR`：默认程序启动时会联网下载一些通用的词元的编码，如：`gpt-3.5-turbo`，在一些网络环境不稳定，或者离线情况，可能会导致启动有问题，可以配置此目录缓存数据，可迁移到离线环境。
-    + `DATA_GYM_CACHE_DIR`：目前该配置作用与 `TIKTOKEN_CACHE_DIR` 一致，但是优先级没有它高。
-16. `RELAY_TIMEOUT`：中继超时设置，单位为秒，默认不设置超时时间。
-17. `RELAY_PROXY`：设置后使用该代理来请求 API。
-18. `USER_CONTENT_REQUEST_TIMEOUT`：用户上传内容下载超时时间，单位为秒。
-19. `USER_CONTENT_REQUEST_PROXY`：设置后使用该代理来请求用户上传的内容，例如图片。
-20. `SQLITE_BUSY_TIMEOUT`：SQLite 锁等待超时设置，单位为毫秒，默认 `3000`。
-21. `GEMINI_SAFETY_SETTING`：Gemini 的安全设置，默认 `BLOCK_NONE`。
-22. `GEMINI_VERSION`：One API 所使用的 Gemini 版本，默认为 `v1`。
-23. `THEME`：系统的主题设置，默认为 `default`，具体可选值参考[此处](./web/README.md)。
-24. `ENABLE_METRIC`：是否根据请求成功率禁用渠道，默认不开启，可选值为 `true` 和 `false`。
-25. `METRIC_QUEUE_SIZE`：请求成功率统计队列大小，默认为 `10`。
-26. `METRIC_SUCCESS_RATE_THRESHOLD`：请求成功率阈值，默认为 `0.8`。
-27. `INITIAL_ROOT_TOKEN`：如果设置了该值，则在系统首次启动时会自动创建一个值为该环境变量值的 root 用户令牌。
-28. `INITIAL_ROOT_ACCESS_TOKEN`：如果设置了该值，则在系统首次启动时会自动创建一个值为该环境变量的 root 用户创建系统管理令牌。
-29. `ENFORCE_INCLUDE_USAGE`：是否强制在 stream 模型下返回 usage，默认不开启，可选值为 `true` 和 `false`。
-30. `TEST_PROMPT`：测试模型时的用户 prompt，默认为 `Print your model name exactly and do not output without any other text.`。
+```sh
+curl --location 'https://oneapi.laisky.com/v1/audio/transcriptions' \
+  --header 'Authorization: Bearer laisky-xxxxxxx' \
+  --form 'file=@"postman-cloud:///1efcd71f-7206-4a70-94d1-7727d79d124b"' \
+  --form 'model="whisper-1"' \
+  --form 'response_format="verbose_json"'
+```
 
-### 命令行参数
-1. `--port <port_number>`: 指定服务器监听的端口号，默认为 `3000`。
-   + 例子：`--port 3000`
-2. `--log-dir <log_dir>`: 指定日志文件夹，如果没有设置，默认保存至工作目录的 `logs` 文件夹下。
-   + 例子：`--log-dir ./logs`
-3. `--version`: 打印系统版本号并退出。
-4. `--help`: 查看命令的使用帮助和参数说明。
+Response:
 
-## 演示
-### 在线演示
-注意，该演示站不提供对外服务：
-https://openai.justsong.cn
+```json
+{
+  "task": "transcribe",
+  "language": "english",
+  "duration": 3.869999885559082,
+  "text": "Hello everyone, nice to see you today",
+  "segments": [
+    {
+      "id": 0,
+      "seek": 0,
+      "start": 0.0,
+      "end": 3.680000066757202,
+      "text": " Hello everyone, nice to see you today",
+      "tokens": [50364, 2425, 1518, 11, 1481, 281, 536, 291, 965, 50548],
+      "temperature": 0.0,
+      "avg_logprob": -0.44038617610931396,
+      "compression_ratio": 0.8604651093482971,
+      "no_speech_prob": 0.002639062935486436
+    }
+  ],
+  "usage": {
+    "type": "duration",
+    "seconds": 4
+  }
+}
+```
 
-### 截图展示
-![channel](https://user-images.githubusercontent.com/39998050/233837954-ae6683aa-5c4f-429f-a949-6645a83c9490.png)
-![token](https://user-images.githubusercontent.com/39998050/233837971-dab488b7-6d96-43af-b640-a168e8d1c9bf.png)
+#### Support openai images edits
 
-## 常见问题
-1. 额度是什么？怎么计算的？One API 的额度计算有问题？
-   + 额度 = 分组倍率 * 模型倍率 * （提示 token 数 + 补全 token 数 * 补全倍率）
-   + 其中补全倍率对于 GPT3.5 固定为 1.33，GPT4 为 2，与官方保持一致。
-   + 如果是非流模式，官方接口会返回消耗的总 token，但是你要注意提示和补全的消耗倍率不一样。
-   + 注意，One API 的默认倍率就是官方倍率，是已经调整过的。
-2. 账户额度足够为什么提示额度不足？
-   + 请检查你的令牌额度是否足够，这个和账户额度是分开的。
-   + 令牌额度仅供用户设置最大使用量，用户可自由设置。
-3. 提示无可用渠道？
-   + 请检查的用户分组和渠道分组设置。
-   + 以及渠道的模型设置。
-4. 渠道测试报错：`invalid character '<' looking for beginning of value`
-   + 这是因为返回值不是合法的 JSON，而是一个 HTML 页面。
-   + 大概率是你的部署站的 IP 或代理的节点被 CloudFlare 封禁了。
-5. ChatGPT Next Web 报错：`Failed to fetch`
-   + 部署的时候不要设置 `BASE_URL`。
-   + 检查你的接口地址和 API Key 有没有填对。
-   + 检查是否启用了 HTTPS，浏览器会拦截 HTTPS 域名下的 HTTP 请求。
-6. 报错：`当前分组负载已饱和，请稍后再试`
-   + 上游渠道 429 了。
-7. 升级之后我的数据会丢失吗？
-   + 如果使用 MySQL，不会。
-   + 如果使用 SQLite，需要按照我所给的部署命令挂载 volume 持久化 one-api.db 数据库文件，否则容器重启后数据会丢失。
-8. 升级之前数据库需要做变更吗？
-   + 一般情况下不需要，系统将在初始化的时候自动调整。
-   + 如果需要的话，我会在更新日志中说明，并给出脚本。
-9. 手动修改数据库后报错：`数据库一致性已被破坏，请联系管理员`？
-   + 这是检测到 ability 表里有些记录的渠道 id 是不存在的，这大概率是因为你删了 channel 表里的记录但是没有同步在 ability 表里清理无效的渠道。
-   + 对于每一个渠道，其所支持的模型都需要有一个专门的 ability 表的记录，表示该渠道支持该模型。
+- [feat: support openai images edits api #1369](https://github.com/songquanpeng/one-api/pull/1369)
 
-## 相关项目
-* [FastGPT](https://github.com/labring/FastGPT): 基于 LLM 大语言模型的知识库问答系统
-* [ChatGPT Next Web](https://github.com/Yidadaa/ChatGPT-Next-Web):  一键拥有你自己的跨平台 ChatGPT 应用
-* [VChart](https://github.com/VisActor/VChart):  不只是开箱即用的多端图表库，更是生动灵活的数据故事讲述者。
-* [VMind](https://github.com/VisActor/VMind):  不仅自动，还很智能。开源智能可视化解决方案。
-* [CherryStudio](https://github.com/CherryHQ/cherry-studio):  全平台支持的AI客户端, 多服务商集成管理、本地知识库支持。
+```sh
+curl --location 'https://oneapi.laisky.com/v1/images/edits' \
+  --header 'Authorization: sk-xxxxxxx' \
+  --form 'image[]=@"postman-cloud:///1f020b33-1ca1-4f10-b6d2-7b12aa70111e"' \
+  --form 'image[]=@"postman-cloud:///1f020b33-22c6-4350-8314-063db53618a4"' \
+  --form 'prompt="put all items in references image into a gift busket"' \
+  --form 'model="gpt-image-1"'
+```
 
-## 注意
+Response:
 
-本项目使用 MIT 协议进行开源，**在此基础上**，必须在页面底部保留署名以及指向本项目的链接。如果不想保留署名，必须首先获得授权。
+```json
+{
+  "created": 1762038453,
+  "data": [
+    {
+      "url": "https://xxxxxxx.png"
+    }
+  ]
+}
+```
 
-同样适用于基于本项目的二开项目。
+#### Support OpenAI o1/o1-mini/o1-preview
 
-依据 MIT 协议，使用者需自行承担使用本项目的风险与责任，本开源项目开发者与此无关。
+- [feat: add openai o1 #1990](https://github.com/songquanpeng/one-api/pull/1990)
+
+#### Support gpt-4o-audio
+
+- [feat: support gpt-4o-audio #2032](https://github.com/songquanpeng/one-api/pull/2032)
+
+```sh
+
+curl --location 'https://oneapi.laisky.com/v1/chat/completions' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: sk-xxxxxxx' \
+  --data '{
+      "model": "gpt-4o-audio-preview",
+
+      "max_tokens": 200,
+      "modalities": ["text", "audio"],
+      "audio": { "voice": "alloy", "format": "pcm16" },
+      "messages": [
+          {
+              "role": "system",
+              "content": "You are a helpful assistant."
+          },
+          {
+              "role": "user",
+              "content": [
+                  {
+                      "type": "text",
+                      "text": "what is in this recording"
+                  },
+                  {
+                      "type": "input_audio",
+                      "input_audio": {
+                          "data": "<BASE64_ENCODED_AUDIO_DATA>",
+                          "format": "mp3"
+                      }
+                  }
+              ]
+          }
+      ]
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": "chatcmpl-CXEuXGd0MagiwenLiOtDhLNMHZs63",
+  "object": "chat.completion",
+  "created": 1762038177,
+  "model": "gpt-4o-audio-preview-2025-06-03",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "refusal": null,
+        "audio": {
+          "id": "audio_690691a2f0248191be5a199d7a49968b",
+          "data": "<BASE64_ENCODED_AUDIO_DATA>",
+          "expires_at": 1762041778,
+          "transcript": "The recording contains a greeting where someone is saying, \"Hello everyone, nice to see you today.\" It sounds like a friendly and casual greeting"
+        },
+        "annotations": []
+      },
+      "finish_reason": "length"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 64,
+    "completion_tokens": 200,
+    "total_tokens": 264,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 38,
+      "text_tokens": 26,
+      "image_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 159,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0,
+      "text_tokens": 41
+    }
+  },
+  "service_tier": "default",
+  "system_fingerprint": "fp_363417d4a6"
+}
+```
+
+#### Support OpenAI web search models
+
+- [feature: support openai web search models #2189](https://github.com/songquanpeng/one-api/pull/2189)
+
+support `gpt-4o-search-preview` & `gpt-4o-mini-search-preview`
+
+```sh
+curl --location 'https://oneapi.laisky.com/v1/chat/completions?thinking=true&reasoning_format=thinking' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: sk-xxxxxxx' \
+  --data '{
+    "model": "gpt-4o-mini-search-preview",
+    "max_tokens": 1024,
+    "stream": false,
+    "messages": [
+      {
+        "role": "user",
+        "content": "what'\''s the weather in ottawa canada?"
+      }
+    ]
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": "resp_0a8e4f5c5f4e4b8f0069068d3f4bb88191f3e1e4b8f4c3faab",
+  "model": "gpt-4o-mini-search-preview",
+  "object": "chat.completion",
+  "created": 1762041234,
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "The current weather in Ottawa, Canada is partly cloudy with a temperature of 22°C (72°F). There is a light breeze coming from the northwest at 10 km/h (6 mph). Humidity is at 60%, and there is no precipitation expected today. For more detailed and up-to-date information, please check a reliable weather website or app.",
+        "thinking": "**Using web search to find current weather information**\n\nI searched for the latest weather updates for Ottawa, Canada. Based on the most recent data available, I found that the weather is partly cloudy with a temperature of 22°C (72°F). I also noted the wind speed and direction, humidity levels, and the absence of precipitation. This information should help the user understand the current weather conditions in Ottawa."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 15,
+    "completion_tokens": 150,
+    "total_tokens": 165,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0,
+      "text_tokens": 15,
+      "image_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 130,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0,
+      "text_tokens": 20,
+      "cached_tokens": 0
+    }
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "id": "chatcmpl-3ba4b046-577a-4cbd-8ebc-80b48607e6ee",
+  "object": "chat.completion",
+  "created": 1762038412,
+  "model": "gpt-4o-mini-search-preview-2025-03-11",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "As of 6:06 PM on Saturday, November 1, 2025, in Ottawa, Canada, the weather is mostly cloudy with a temperature of 38°F (4°C).\n\n## Weather for Ottawa, ON:\nCurrent Conditions: Mostly cloudy, 38°F (4°C)\n\nDaily Forecast:\n* Saturday, November 1: Low: 35°F (1°C), High: 43°F (6°C), Description: Cloudy and breezy with a shower in spots\n* Sunday, November 2: Low: 36°F (2°C), High: 46°F (8°C), Description: Cloudy in the morning, then times of clouds and sun in the afternoon\n* Monday, November 3: Low: 36°F (2°C), High: 51°F (11°C), Description: Cloudy and breezy with showers\n* Tuesday, November 4: Low: 34°F (1°C), High: 52°F (11°C), Description: Mostly sunny and breezy\n* Wednesday, November 5: Low: 36°F (2°C), High: 44°F (7°C), Description: Cloudy with a couple of showers, mainly later\n* Thursday, November 6: Low: 29°F (-1°C), High: 44°F (7°C), Description: A little morning rain; otherwise, cloudy most of the time\n* Friday, November 7: Low: 32°F (0°C), High: 45°F (7°C), Description: Mostly cloudy\n\n\nIn November, Ottawa typically experiences cool and damp conditions, with average high temperatures around 5°C (41°F) and lows near -2°C (28°F). The city usually receives about 84 mm (3.3 inches) of precipitation over 14 days during the month. ([weather2visit.com](https://www.weather2visit.com/north-america/canada/ottawa-november.htm?utm_source=openai)) ",
+        "refusal": null,
+        "annotations": [
+          {
+            "type": "url_citation",
+            "url_citation": {
+              "end_index": 1358,
+              "start_index": 1247,
+              "title": "Ottawa Weather in November 2025 | Canada Averages | Weather-2-Visit",
+              "url": "https://www.weather2visit.com/north-america/canada/ottawa-november.htm?utm_source=openai"
+            }
+          }
+        ]
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 9,
+    "completion_tokens": 411,
+    "total_tokens": 420,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "system_fingerprint": ""
+}
+```
+
+#### Support gpt-image family for image generation & edits
+
+Support gpt-image for image generation and editing.
+
+gpt-image-1 / gpt-image-1-mini / chatgpt-image-latest / gpt-image-1.5 / gpt-image-1.5-2025-12-16
+
+Draw image:
+
+```sh
+curl --location 'https://oneapi.laisky.com/v1/images/generations' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: sk-xxxxxxx' \
+--data '{
+    "model": "gpt-image-1-mini",
+    "prompt": "draw a goose",
+    "n": 1,
+    "size": "1024x1024",
+    "response_format": "b64_json"
+}'
+```
+
+Response:
+
+```json
+{
+  "created": 1763152907,
+  "background": "opaque",
+  "data": [
+    {
+      "b64_json": "iVBORw0KGgoAAAANS..."
+    }
+  ],
+  "output_format": "png",
+  "quality": "high",
+  "size": "1536x1024",
+  "usage": {
+    "input_tokens": 437,
+    "input_tokens_details": {
+      "image_tokens": 388,
+      "text_tokens": 49
+    },
+    "output_tokens": 6208,
+    "total_tokens": 6645
+  }
+}
+```
+
+Edit image:
+
+```sh
+curl --location 'https://oneapi.laisky.com/v1/images/edits' \
+  --header 'Authorization: sk-xxxxxxx' \
+  --form 'image[]=@"postman-cloud:///1f020b33-1ca1-4f10-b6d2-7b12aa70111e"' \
+  --form 'image[]=@"postman-cloud:///1f020b33-22c6-4350-8314-063db53618a4"' \
+  --form 'prompt="put all items in references image into a gift busket"' \
+  --form 'model="gpt-image-1-mini"'
+```
+
+Response:
+
+```json
+{
+  "created": 1763152907,
+  "background": "opaque",
+  "data": [
+    {
+      "b64_json": "iVBORw0KGgoAAAANS..."
+    }
+  ],
+  "output_format": "png",
+  "quality": "high",
+  "size": "1536x1024",
+  "usage": {
+    "input_tokens": 437,
+    "input_tokens_details": {
+      "image_tokens": 388,
+      "text_tokens": 49
+    },
+    "output_tokens": 6208,
+    "total_tokens": 6645
+  }
+}
+```
+
+#### Support o3-mini & o3 & o4-mini & gpt-4.1 & o3-pro & reasoning content
+
+- [feat: extend support for o3 models and update model ratios #2048](https://github.com/songquanpeng/one-api/pull/2048)
+
+![](https://s3.laisky.com/uploads/2025/06/o3-pro.png)
+
+#### Support OpenAI Response API
+
+```sh
+curl --location 'https://oneapi.laisky.com/v1/responses' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: sk-xxxxxxx' \
+  --data '{
+      "model": "gemini-2.5-flash",
+      "input": "Tell me a three sentence bedtime story about a unicorn."
+    }'
+```
+
+Response:
+
+```json
+{
+  "id": "resp-2025110123121283977003996295227",
+  "object": "response",
+  "created_at": 1762038734,
+  "status": "completed",
+  "model": "gemini-2.5-flash",
+  "output": [
+    {
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "Lily the unicorn lived in a meadow where rainbows touched the ground. Every evening, she would gallop beneath the starry sky, her horn glowing like a tiny lantern. When she finally nestled into her bed of soft moss, all the little forest creatures drifted off to sleep, feeling safe and warm."
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 12,
+    "output_tokens": 151,
+    "total_tokens": 163
+  },
+  "parallel_tool_calls": false
+}
+```
+
+#### Support gpt-5 family
+
+gpt-5.2 / gpt-5.2-2025-12-11 / gpt-5.2-pro / gpt-5.2-pro-2025-12-11
+
+gpt-5.1-chat-latest / gpt-5.1 / gpt-5.1-2025-11-13 / gpt-5.1-codex / gpt-5.1-codex-mini
+
+gpt-5-chat-latest / gpt-5 / gpt-5-mini / gpt-5-nano / gpt-5-codex / gpt-5.1-codex-max/ gpt-5-pro
+
+#### Support o3-deep-research & o4-mini-deep-research
+
+```sh
+curl --location 'https://oneapi.laisky.com/v1/chat/completions?thinking=true&reasoning_format=thinking' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: sk-xxxxxxx' \
+  --data '{
+    "model": "o4-mini-deep-research",
+    "max_tokens": 9086,
+    "stream": false,
+    "messages": [
+      {
+        "role": "user",
+        "content": "what'\''s the weather in ottawa canada?"
+      }
+    ]
+  }'
+```
+
+Response:
+
+> [!NOTE]
+>
+> To run deep‑research successfully, you need to configure a comparatively large `max_tokens` value. This response was cut off due to the `max_tokens` limit you set.
+
+```json
+{
+  "id": "resp_0457d54ec43cbbe2006906945811f081a28fce9f1839c1fa67",
+  "model": "o4-mini-deep-research",
+  "object": "chat.completion",
+  "created": 1762038872,
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "thinking": "**Finding current weather in Ottawa**\n\nThe user asked about the current weather in Ottawa, Canada, which means I need to retrieve up-to-date weather information. I can't rely on past knowledge here; I should search for current weather reports specifically for that location. It's November 1, 2025, so it's essential to consider both the time and place as I look for reliable sources, like local weather sites or official forecasts, to provide the user with accurate information.**Searching for current weather**\n\nThis looks like a weather query that requires me to retrieve the latest information. I need to remember that the instructions emphasize using searches for up-to-date data and not relying solely on past knowledge. Since the guidelines don't prohibit weather queries, I should feel safe in proceeding. I’ll look up the current weather for Ottawa, Canada, using a browser search to ensure I provide accurate and timely information for the user."
+      },
+      "finish_reason": "length"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 31134,
+    "completion_tokens": 2608,
+    "total_tokens": 33742,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0,
+      "text_tokens": 0,
+      "image_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 2624,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0,
+      "text_tokens": 0,
+      "cached_tokens": 0
+    }
+  }
+}
+```
+
+#### Support Codex Cli
+
+```sh
+# vi $HOME/.codex/config.toml
+
+model = "gemini-2.5-flash"
+model_provider = "laisky"
+
+[model_providers.laisky]
+# Name of the provider that will be displayed in the Codex UI.
+name = "Laisky"
+# The path `/chat/completions` will be amended to this URL to make the POST
+# request for the chat completions.
+base_url = "https://oneapi.laisky.com/v1"
+# If `env_key` is set, identifies an environment variable that must be set when
+# using Codex with this provider. The value of the environment variable must be
+# non-empty and will be used in the `Bearer TOKEN` HTTP header for the POST request.
+env_key = "sk-xxxxxxx"
+# Valid values for wire_api are "chat" and "responses". Defaults to "chat" if omitted.
+wire_api = "responses"
+# If necessary, extra query params that need to be added to the URL.
+# See the Azure example below.
+query_params = {}
+
+```
+
+#### Support Sora
+
+> <https://platform.openai.com/docs/guides/video-generation>
+
+Create Video Task:
+
+```sh
+curl --location 'https://oneapi.laisky.com/v1/videos' \
+  --header 'Authorization: sk-xxxxxxx' \
+  --form 'prompt="aurora"' \
+  --form 'model="sora-2"' \
+  --form 'seconds="4"' \
+  --form 'size="1280x720"'
+```
+
+Response:
+
+```json
+{
+  "id": "video_691608967fe8819399e710799dae2ae708872b008b63ff61",
+  "object": "video",
+  "created_at": 1763051670,
+  "status": "queued",
+  "completed_at": null,
+  "error": null,
+  "expires_at": null,
+  "model": "sora-2",
+  "progress": 0,
+  "prompt": "aurora",
+  "remixed_from_video_id": null,
+  "seconds": "4",
+  "size": "1280x720"
+}
+```
+
+Get Video Task Status:
+
+```sh
+curl --location 'https://oneapi.laisky.com/v1/videos/video_691608967fe8819399e710799dae2ae708872b008b63ff61'
+  --header 'Authorization: sk-xxxxxxx'
+```
+
+Response:
+
+```json
+{
+  "id": "video_691611812ca88190bfb123716dcc953a089a232f54b02b21",
+  "object": "video",
+  "created_at": 1763053953,
+  "status": "completed",
+  "completed_at": 1763054021,
+  "error": null,
+  "expires_at": 1763057621,
+  "model": "sora-2",
+  "progress": 100,
+  "prompt": "aurora",
+  "remixed_from_video_id": null,
+  "seconds": "4",
+  "size": "1280x720"
+}
+```
+
+Download Video:
+
+```sh
+curl --location 'https://oneapi.laisky.com/v1/videos/video_691611812ca88190bfb123716dcc953a089a232f54b02b21/content'
+  --header 'Authorization: sk-xxxxxxx'
+```
+
+### Anthropic (Claude) Features
+
+#### (Merged) Support aws claude
+
+- [feat: support aws bedrockruntime claude3 #1328](https://github.com/songquanpeng/one-api/pull/1328)
+- [feat: add new claude models #1910](https://github.com/songquanpeng/one-api/pull/1910)
+
+![](https://s3.laisky.com/uploads/2024/12/oneapi-claude.png)
+
+#### Support claude-3-7-sonnet & thinking
+
+- [feat: support claude-3-7-sonnet #2143](https://github.com/songquanpeng/one-api/pull/2143/files)
+- [feat: support claude thinking #2144](https://github.com/songquanpeng/one-api/pull/2144)
+
+By default, the thinking mode is not enabled. You need to manually pass the `thinking` field in the request body to enable it.
+
+##### Stream
+
+![](https://s3.laisky.com/uploads/2025/02/claude-thinking.png)
+
+##### Non-Stream
+
+![](https://s3.laisky.com/uploads/2025/02/claude-thinking-non-stream.png)
+
+#### Support /v1/messages Claude Messages API
+
+![](https://s3.laisky.com/uploads/2025/07/claude_messages.png)
+
+##### Support Claude Code
+
+```sh
+export ANTHROPIC_MODEL="openai/gpt-oss-120b"
+export ANTHROPIC_BASE_URL="https://oneapi.laisky.com/"
+export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxx"
+```
+
+You can use any model you like for Claude Code, even if the model doesn’t natively support the Claude Messages API.
+
+### Support Claude 4.x Models
+
+![](https://s3.laisky.com/uploads/2025/09/claude-sonnet-4-5.png)
+
+claude-opus-4-0 / claude-opus-4-1 / claude-opus-4-5 / claude-sonnet-4-0 / claude-sonnet-4-5 / claude-haiku-4-5
+
+### Google (Gemini & Vertex) Features
+
+#### Support gemini-2.0-flash-exp
+
+- [feat: add gemini-2.0-flash-exp #1983](https://github.com/songquanpeng/one-api/pull/1983)
+
+![](https://s3.laisky.com/uploads/2024/12/oneapi-gemini-flash.png)
+
+#### Support gemini-2.0-flash
+
+- [feat: support gemini-2.0-flash #2055](https://github.com/songquanpeng/one-api/pull/2055)
+
+#### Support gemini-2.0-flash-thinking-exp-01-21
+
+- [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/songquanpeng/one-api/pull/2045)
+
+#### Support Vertex Imagen3
+
+- [feat: support vertex imagen3 #2030](https://github.com/songquanpeng/one-api/pull/2030)
+
+![](https://s3.laisky.com/uploads/2025/01/oneapi-imagen3.png)
+
+#### Support gemini multimodal output #2197
+
+- [feature: support gemini multimodal output #2197](https://github.com/songquanpeng/one-api/pull/2197)
+
+![](https://s3.laisky.com/uploads/2025/03/gemini-multimodal.png)
+
+#### Support gemini-2.5-pro
+
+#### Support GCP Vertex gloabl region and gemini-2.5-pro-preview-06-05
+
+![](https://s3.laisky.com/uploads/2025/06/gemini-2.5-pro-preview-06-05.png)
+
+#### Support gemini-2.5-flash-image-preview & imagen-4 series
+
+![](https://s3.laisky.com/uploads/2025/09/gemini-banana.png)
+
+#### Support gemini-3 family
+
+Support gemini-3-pro-preview / gemini-3-pro-image-preview / gemini-3-flash-preview
+
+### OpenCode Support
+
+<p align="center">
+  <a href="https://opencode.ai">
+    <picture>
+      <source srcset="https://github.com/sst/opencode/raw/dev/packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+      <source srcset="https://github.com/sst/opencode/raw/dev/packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+      <img src="https://github.com/sst/opencode/raw/dev/packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+    </picture>
+  </a>
+</p>
+
+[opencode.ai](https://opencode.ai) is an AI coding agent built for the terminal. OpenCode is fully open source, giving you control and `freedom` to use any provider, any model, and any editor. It's available as both a CLI and TUI.
+
+One‑API integrates seamlessly with OpenCode: you can connect any One‑API endpoint and use all your unified models through OpenCode's interface (both CLI and TUI).
+
+To get started, create or edit `~/.config/opencode/opencode.json` like this:
+
+**Using OpenAI SDK:**
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "one-api": {
+      "npm": "@ai-sdk/openai",
+      "name": "One API",
+      "options": {
+        "baseURL": "https://oneapi.laisky.com/v1",
+        "apiKey": "<ONEAPI_TOKEN_KEY>"
+      },
+      "models": {
+        "gpt-4.1-2025-04-14": {
+          "name": "GPT 4.1"
+        }
+      }
+    }
+  }
+}
+```
+
+**Using Anthropic SDK:**
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "one-api-anthropic": {
+      "npm": "@ai-sdk/anthropic",
+      "name": "One API (Anthropic)",
+      "options": {
+        "baseURL": "https://oneapi.laisky.com/v1",
+        "apiKey": "<ONEAPI_TOKEN_KEY>"
+      },
+      "models": {
+        "claude-sonnet-4-5": {
+          "name": "Claude Sonnet 4.5"
+        }
+      }
+    }
+  }
+}
+```
+
+### AWS Features
+
+#### Support AWS cross-region inferences
+
+- [fix: support aws cross region inferences #2182](https://github.com/songquanpeng/one-api/pull/2182)
+
+#### Support AWS BedRock Inference Profile
+
+![](https://s3.laisky.com/uploads/2025/07/aws-inference-profile.png)
+
+### Replicate Features
+
+#### Support replicate flux & remix
+
+- [feature: 支持 replicate 的绘图 #1954](https://github.com/songquanpeng/one-api/pull/1954)
+- [feat: image edits/inpaiting 支持 replicate 的 flux remix #1986](https://github.com/songquanpeng/one-api/pull/1986)
+
+![](https://s3.laisky.com/uploads/2024/12/oneapi-replicate-1.png)
+
+![](https://s3.laisky.com/uploads/2024/12/oneapi-replicate-2.png)
+
+![](https://s3.laisky.com/uploads/2024/12/oneapi-replicate-3.png)
+
+#### Support replicate chat models
+
+- [feat: 支持 replicate chat models #1989](https://github.com/songquanpeng/one-api/pull/1989)
+
+### DeepSeek Features
+
+#### Support deepseek-reasoner
+
+- [feature: add deepseek-reasoner & gemini-2.0-flash-thinking-exp-01-21 #2045](https://github.com/songquanpeng/one-api/pull/2045)
+
+### OpenRouter Features
+
+#### Support OpenRouter's reasoning content
+
+- [feat: support OpenRouter reasoning #2108](https://github.com/songquanpeng/one-api/pull/2108)
+
+By default, the thinking mode is automatically enabled for the deepseek-r1 model, and the response is returned in the open-router format.
+
+![](https://s3.laisky.com/uploads/2025/02/openrouter-reasoning.png)
+
+### Cohere
+
+#### Support Cohere Command R & Rerank
+
+```sh
+curl --location 'https://oneapi.laisky.com/v1/rerank' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: sk-xxxxxxx' \
+  --data '{
+      "model": "rerank-v3.5",
+      "query": "What is the capital of the United States?",
+      "top_n": 3,
+      "documents": [
+          "Carson City is the capital city of the American state of Nevada.",
+          "The Commonwealth of the Northern Mariana Islands is a group of islands in the Pacific Ocean. Its capital is Saipan.",
+          "Washington, D.C. (also known as simply Washington or D.C., and officially as the District of Columbia) is the capital of the United States. It is a federal district.",
+          "Capitalization or capitalisation in English grammar is the use of a capital letter at the start of a word. English usage varies from capitalization in other languages.",
+          "Capital punishment has existed in the United States since beforethe United States was a country. As of 2017, capital punishment is legal in 30 of the 50 states."
+      ]
+  }'
+
+```
+
+Response:
+
+```json
+{
+  "object": "cohere.rerank",
+  "model": "rerank-v3.5",
+  "id": "ff9458ce-318b-4317-ad49-f8654c976dff",
+  "results": [
+    {
+      "index": 2,
+      "relevance_score": 0.8742601
+    },
+    {
+      "index": 0,
+      "relevance_score": 0.17292508
+    },
+    {
+      "index": 4,
+      "relevance_score": 0.10793502
+    }
+  ],
+  "meta": {
+    "api_version": {
+      "version": "2",
+      "is_experimental": false
+    },
+    "billed_units": {
+      "search_units": 1
+    }
+  },
+  "usage": {
+    "prompt_tokens": 153,
+    "total_tokens": 153
+  }
+}
+```
+
+### Coze Features
+
+#### Support coze oauth authentication
+
+- [feat: support coze oauth authentication](https://github.com/Laisky/one-api/pull/52)
+
+### Moonshot Features
+
+#### Support kimi-k2 Family
+
+Support:
+
+- `kimi-k2-0905-preview`
+- `kimi-k2-0711-preview`
+- `kimi-k2-turbo-preview`
+- `kimi-k2-thinking`
+- `kimi-k2-thinking-turbo`
+
+### GLM Features
+
+Support:
+
+- `glm-zero-preview`
+- `glm-3-turbo`
+- `cogview-3-flash`
+- `codegeex-4`
+- `embedding-3`
+- `embedding-2`
+
+#### Support GLM-4 Family
+
+- `glm-4.6`
+- `glm-4.5`
+- `glm-4.5-x`
+- `glm-4.5-air`
+- `glm-4.5-airx`
+- `glm-4.5-flash`
+- `glm-4v-flash`
+
+### XAI / Grok Features
+
+#### Support XAI/Grok Text & Image Models
+
+![](https://s3.laisky.com/uploads/2025/08/groq.png)
+
+### Black Forest Labs Features
+
+#### Support black-forest-labs/flux-kontext-pro
+
+![](https://s3.laisky.com/uploads/2025/05/flux-kontext-pro.png)
+
+## Bug Fixes & Enterprise-Grade Improvements (Including Security Enhancements)
+
+- [BUGFIX: Several issues when updating tokens #1933](https://github.com/songquanpeng/one-api/pull/1933)
+- [feat(audio): count whisper-1 quota by audio duration #2022](https://github.com/songquanpeng/one-api/pull/2022)
+- [fix: Fix issue where high-quota users using low-quota tokens aren't pre-charged, causing large token deficits under high concurrency #25](https://github.com/Laisky/one-api/pull/25)
+- [fix: channel test false negative #2065](https://github.com/songquanpeng/one-api/pull/2065)
+- [fix: resolve "bufio.Scanner: token too long" error by increasing buffer size #2128](https://github.com/songquanpeng/one-api/pull/2128)
+- [feat: Enhance VolcEngine channel support with bot model #2131](https://github.com/songquanpeng/one-api/pull/2131)
+- [fix: models API returns models in deactivated channels #2150](https://github.com/songquanpeng/one-api/pull/2150)
+- [fix: Automatically close channel when connection fails](https://github.com/Laisky/one-api/pull/34)
+- [fix: update EmailDomainWhitelist submission logic #33](https://github.com/Laisky/one-api/pull/33)
+- [fix: send ByAll](https://github.com/Laisky/one-api/pull/35)
+- [fix: oidc token endpoint request body #2106 #36](https://github.com/Laisky/one-api/pull/36)
+
+> [!NOTE]
+>
+> For additional enterprise-grade improvements, including security enhancements (e.g., [vulnerability fixes](https://github.com/Laisky/one-api/pull/126)), you can also view these pull requests [here](https://github.com/Laisky/one-api/pulls?q=is%3Apr+is%3Aclosed).

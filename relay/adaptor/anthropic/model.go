@@ -1,5 +1,7 @@
 package anthropic
 
+import "github.com/songquanpeng/one-api/relay/model"
+
 // https://docs.anthropic.com/claude/reference/messages_post
 
 type Metadata struct {
@@ -22,6 +24,9 @@ type Content struct {
 	Input     any    `json:"input,omitempty"`
 	Content   string `json:"content,omitempty"`
 	ToolUseId string `json:"tool_use_id,omitempty"`
+	// https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#implementing-extended-thinking
+	Thinking  *string `json:"thinking,omitempty"`
+	Signature *string `json:"signature,omitempty"`
 }
 
 type Message struct {
@@ -41,6 +46,7 @@ type InputSchema struct {
 	Required   any    `json:"required,omitempty"`
 }
 
+// Request is anthropic's request body
 type Request struct {
 	Model         string    `json:"model"`
 	Messages      []Message `json:"messages"`
@@ -50,15 +56,30 @@ type Request struct {
 	Stream        bool      `json:"stream,omitempty"`
 	Temperature   *float64  `json:"temperature,omitempty"`
 	TopP          *float64  `json:"top_p,omitempty"`
-	TopK          int       `json:"top_k,omitempty"`
+	TopK          *int      `json:"top_k,omitempty"`
 	Tools         []Tool    `json:"tools,omitempty"`
 	ToolChoice    any       `json:"tool_choice,omitempty"`
 	//Metadata    `json:"metadata,omitempty"`
+	Thinking         *model.Thinking `json:"thinking,omitempty"`
+	AnthropicVersion string          `json:"anthropic_version,omitempty"`
 }
 
+// Usage is the token usage information in the response
+//
+// - https://docs.anthropic.com/en/api/messages#response-usage
+// - https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
 type Usage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int            `json:"input_tokens"`
+	CacheReadInputTokens     int            `json:"cache_read_input_tokens,omitempty"`
+	CacheCreationInputTokens int            `json:"cache_creation_input_tokens,omitempty"`
+	OutputTokens             int            `json:"output_tokens"`
+	CacheCreation            *CacheCreation `json:"cache_creation,omitempty"`
+	ServiceTier              string         `json:"service_tier,omitempty"`
+}
+
+type CacheCreation struct {
+	Ephemeral5mInputTokens int `json:"ephemeral_5m_input_tokens,omitempty"`
+	Ephemeral1hInputTokens int `json:"ephemeral_1h_input_tokens,omitempty"`
 }
 
 type Error struct {
@@ -66,6 +87,20 @@ type Error struct {
 	Message string `json:"message"`
 }
 
+type ResponseType string
+
+const (
+	TypeError        ResponseType = "error"
+	TypeStart        ResponseType = "message_start"
+	TypeContentStart ResponseType = "content_block_start"
+	TypeContent      ResponseType = "content_block_delta"
+	TypePing         ResponseType = "ping"
+	TypeContentStop  ResponseType = "content_block_stop"
+	TypeMessageDelta ResponseType = "message_delta"
+	TypeMessageStop  ResponseType = "message_stop"
+)
+
+// https://docs.anthropic.com/claude/reference/messages-streaming
 type Response struct {
 	Id           string    `json:"id"`
 	Type         string    `json:"type"`
@@ -84,6 +119,8 @@ type Delta struct {
 	PartialJson  string  `json:"partial_json,omitempty"`
 	StopReason   *string `json:"stop_reason"`
 	StopSequence *string `json:"stop_sequence"`
+	Thinking     *string `json:"thinking,omitempty"`
+	Signature    *string `json:"signature,omitempty"`
 }
 
 type StreamResponse struct {
@@ -93,4 +130,7 @@ type StreamResponse struct {
 	ContentBlock *Content  `json:"content_block"`
 	Delta        *Delta    `json:"delta"`
 	Usage        *Usage    `json:"usage"`
+	// Error events are sent over SSE as {"type":"error","error":{...},"request_id":"..."}
+	Error     Error  `json:"error"`
+	RequestId string `json:"request_id,omitempty"`
 }
